@@ -21,7 +21,7 @@ export function listTasks(req: AuthenticatedRequest, res: Response): void {
     params.push(`%${search}%`);
   }
 
-  query += ' ORDER BY CASE status WHEN "in_progress" THEN 1 WHEN "scheduled" THEN 2 WHEN "pending_slot" THEN 3 ELSE 4 END, scheduled_start ASC, created_at DESC';
+  query += " ORDER BY CASE status WHEN 'in_progress' THEN 1 WHEN 'scheduled' THEN 2 WHEN 'pending_slot' THEN 3 ELSE 4 END, scheduled_start ASC, created_at DESC";
 
   const tasks = db.prepare(query).all(...params) as Task[];
   res.json({ tasks });
