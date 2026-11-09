@@ -1,0 +1,9 @@
+node_modules/
+dist/
+data/*.db*
+.env
+.DS_Store
+*.log
+npm-debug.log*
+pnpm-debug.log*
+client/dist/
