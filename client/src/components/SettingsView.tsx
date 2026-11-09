@@ -1,5 +1,6 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { api } from '../api/client';
+import { QRCodeSVG } from 'qrcode.react';
 import {
   Bot,
   Brain,
@@ -12,6 +13,11 @@ import {
   RefreshCw,
   Save,
   CheckCircle2,
+  AlertCircle,
+  QrCode,
+  Send,
+  LogOut,
+  ExternalLink,
 } from 'lucide-react';
 
 interface WorkSlot {
@@ -34,15 +40,23 @@ export const SettingsView: React.FC = () => {
   const [saving, setSaving] = useState(false);
   const [saveSuccess, setSaveSuccess] = useState(false);
 
-  // Settings fields
+  // Weixin Clawbot Integration State
+  const [wxConnected, setWxConnected] = useState(false);
+  const [wxUserId, setWxUserId] = useState('');
+  const [wxNickname, setWxNickname] = useState('');
+  const [, setQrCode] = useState('');
+  const [qrCodeImgContent, setQrCodeImgContent] = useState('');
+  const [qrStatus, setQrStatus] = useState<'idle' | 'loading' | 'wait' | 'scaned' | 'confirmed' | 'expired'>('idle');
+  const [qrStatusMsg, setQrStatusMsg] = useState('');
+  const [testSending, setTestSending] = useState(false);
+  const [testResult, setTestResult] = useState<string | null>(null);
+
+  const pollTimerRef = useRef<ReturnType<typeof setInterval> | null>(null);
+
+  // LLM fields
   const [llmEndpoint, setLlmEndpoint] = useState('https://api.deepseek.com/v1');
   const [llmApiKey, setLlmApiKey] = useState('');
   const [llmModel, setLlmModel] = useState('deepseek-chat');
-
-  const [webhookUrl, setWebhookUrl] = useState('');
-  const [clawbotOutboundUrl, setClawbotOutboundUrl] = useState('');
-  const [clawbotOutboundKey, setClawbotOutboundKey] = useState('');
-  const [clawbotToWxid, setClawbotToWxid] = useState('');
 
   // Preferences
   const [workSlots, setWorkSlots] = useState<WorkSlot[]>([
@@ -51,60 +65,174 @@ export const SettingsView: React.FC = () => {
     { start: '19:00', end: '24:00' },
     { start: '00:00', end: '02:00' },
   ]);
-  const [taskBufferMinutes, setTaskBufferMinutes] = useState(10);
-  const [reminderBeforeStart, setReminderBeforeStart] = useState(5);
-  const [reminderBeforeEnd, setReminderBeforeEnd] = useState(5);
-  const [syncInterval, setSyncInterval] = useState(60);
+  const [taskBuffer, setTaskBuffer] = useState<number>(15);
+  const [remindStart, setRemindStart] = useState<number>(10);
+  const [remindEnd, setRemindEnd] = useState<number>(5);
+  const [calSyncInterval, setCalSyncInterval] = useState<number>(30);
 
-  // Calendar Subscriptions
+  // Calendar feeds
   const [subs, setSubs] = useState<CalendarSub[]>([]);
   const [newSubName, setNewSubName] = useState('');
   const [newSubUrl, setNewSubUrl] = useState('');
   const [addingSub, setAddingSub] = useState(false);
 
-  const [copiedWebhook, setCopiedWebhook] = useState(false);
+  // iCal export urls
+  const [icalExportUrl, setIcalExportUrl] = useState('');
+  const [copiedIcal, setCopiedIcal] = useState(false);
+
+  // Cleanup polling on unmount
+  useEffect(() => {
+    return () => {
+      if (pollTimerRef.current) clearInterval(pollTimerRef.current);
+    };
+  }, []);
 
   const fetchSettings = async () => {
     try {
+      setLoading(true);
       const res = await api.get('/settings');
-      const s = res.data.settings;
-      if (s) {
-        if (s.llm_endpoint) setLlmEndpoint(s.llm_endpoint);
-        if (s.llm_api_key) setLlmApiKey(s.llm_api_key);
-        if (s.llm_model) setLlmModel(s.llm_model);
-        if (s.clawbot_outbound_url) setClawbotOutboundUrl(s.clawbot_outbound_url);
-        if (s.clawbot_outbound_key) setClawbotOutboundKey(s.clawbot_outbound_key);
-        if (s.clawbot_to_wxid) setClawbotToWxid(s.clawbot_to_wxid);
-        if (s.task_buffer_minutes !== undefined) setTaskBufferMinutes(s.task_buffer_minutes);
-        if (s.reminder_before_start_minutes !== undefined) setReminderBeforeStart(s.reminder_before_start_minutes);
-        if (s.reminder_before_end_minutes !== undefined) setReminderBeforeEnd(s.reminder_before_end_minutes);
-        if (s.calendar_sync_interval_minutes !== undefined) setSyncInterval(s.calendar_sync_interval_minutes);
-        if (s.work_slots) {
+      const { settings, urls } = res.data;
+      if (settings) {
+        setLlmEndpoint(settings.llm_endpoint || 'https://api.deepseek.com/v1');
+        setLlmApiKey(settings.llm_api_key || '');
+        setLlmModel(settings.llm_model || 'deepseek-chat');
+
+        // Weixin status
+        setWxConnected(Boolean(settings.weixin_connected));
+        setWxUserId(settings.weixin_user_id || '');
+        setWxNickname(settings.weixin_nickname || '');
+
+        if (settings.work_slots) {
           try {
-            setWorkSlots(JSON.parse(s.work_slots));
-          } catch {}
+            setWorkSlots(JSON.parse(settings.work_slots));
+          } catch {
+            // fallback
+          }
         }
+        setTaskBuffer(settings.task_buffer_minutes ?? 15);
+        setRemindStart(settings.reminder_before_start_minutes ?? 10);
+        setRemindEnd(settings.reminder_before_end_minutes ?? 5);
+        setCalSyncInterval(settings.calendar_sync_interval_minutes ?? 30);
       }
-      setWebhookUrl(res.data.urls.webhookUrl);
+
+      if (urls?.icalSubscriptionUrl) {
+        setIcalExportUrl(urls.icalSubscriptionUrl);
+      }
+
+      // If not connected to WeChat, load QR code
+      if (!settings?.weixin_connected) {
+        fetchQrCode();
+      }
     } catch (err) {
-      console.error(err);
+      console.error('Failed to load settings:', err);
+    } finally {
+      setLoading(false);
     }
   };
 
-  const fetchSubscriptions = async () => {
+  const fetchSubs = async () => {
     try {
       const res = await api.get('/calendar/subscriptions');
-      setSubs(res.data.subscriptions);
+      setSubs(res.data.subscriptions || []);
     } catch (err) {
-      console.error(err);
+      console.error('Failed to load subscriptions:', err);
     }
   };
 
   useEffect(() => {
-    Promise.all([fetchSettings(), fetchSubscriptions()]).finally(() => setLoading(false));
+    fetchSettings();
+    fetchSubs();
   }, []);
 
-  const handleSave = async (e: React.FormEvent) => {
+  // Fetch WeChat QR Code & start polling
+  const fetchQrCode = async () => {
+    if (pollTimerRef.current) {
+      clearInterval(pollTimerRef.current);
+      pollTimerRef.current = null;
+    }
+
+    try {
+      setQrStatus('loading');
+      setQrStatusMsg('正在向微信服务器申请登录二维码...');
+      const res = await api.get('/weixin/qrcode');
+      const { qrcode, qrcode_img_content } = res.data;
+      setQrCode(qrcode);
+      setQrCodeImgContent(qrcode_img_content);
+      setQrStatus('wait');
+      setQrStatusMsg('请打开手机微信【扫一扫】屏幕二维码');
+
+      // Start polling status
+      pollTimerRef.current = setInterval(() => {
+        checkQrStatus(qrcode);
+      }, 2500);
+    } catch (err: unknown) {
+      const error = err as { response?: { data?: { error?: string } }; message?: string };
+      setQrStatus('idle');
+      setQrStatusMsg('获取二维码失败: ' + (error.response?.data?.error || error.message || '网络错误'));
+    }
+  };
+
+  const checkQrStatus = async (code: string) => {
+    try {
+      const res = await api.get(`/weixin/status?qrcode=${encodeURIComponent(code)}`);
+      const data = res.data;
+
+      if (data.status === 'scaned') {
+        setQrStatus('scaned');
+        setQrStatusMsg('已扫码！请在手机微信上点击【允许】以完成配对...');
+      } else if (data.status === 'confirmed') {
+        setQrStatus('confirmed');
+        setQrStatusMsg('配对成功！已连接微信助手');
+        setWxConnected(true);
+        setWxUserId(data.user_id || '');
+        setWxNickname(data.nickname || '');
+
+        if (pollTimerRef.current) {
+          clearInterval(pollTimerRef.current);
+          pollTimerRef.current = null;
+        }
+      } else if (data.status === 'expired') {
+        setQrStatus('expired');
+        setQrStatusMsg('二维码已过期，请点击重新获取');
+        if (pollTimerRef.current) {
+          clearInterval(pollTimerRef.current);
+          pollTimerRef.current = null;
+        }
+      }
+    } catch {
+      // Ignore transient polling network errors
+    }
+  };
+
+  const handleUnbindWeixin = async () => {
+    if (!confirm('确定要解除当前微信配对吗？解除后机器人将停止微信通知。')) return;
+    try {
+      await api.post('/weixin/unbind');
+      setWxConnected(false);
+      setWxUserId('');
+      setWxNickname('');
+      fetchQrCode();
+    } catch (err: unknown) {
+      const error = err as { response?: { data?: { error?: string } }; message?: string };
+      alert('解绑失败: ' + (error.response?.data?.error || error.message));
+    }
+  };
+
+  const handleSendTestMessage = async () => {
+    try {
+      setTestSending(true);
+      setTestResult(null);
+      const res = await api.post('/weixin/test-message');
+      setTestResult(res.data.message || '测试消息已成功推送！');
+    } catch (err: unknown) {
+      const error = err as { response?: { data?: { error?: string } }; message?: string };
+      setTestResult('发送失败: ' + (error.response?.data?.error || error.message));
+    } finally {
+      setTestSending(false);
+    }
+  };
+
+  const handleSavePreferences = async (e: React.FormEvent) => {
     e.preventDefault();
     setSaving(true);
     setSaveSuccess(false);
@@ -114,238 +242,306 @@ export const SettingsView: React.FC = () => {
         llm_endpoint: llmEndpoint,
         llm_api_key: llmApiKey,
         llm_model: llmModel,
-        clawbot_outbound_url: clawbotOutboundUrl,
-        clawbot_outbound_key: clawbotOutboundKey,
-        clawbot_to_wxid: clawbotToWxid,
         work_slots: workSlots,
-        task_buffer_minutes: taskBufferMinutes,
-        reminder_before_start_minutes: reminderBeforeStart,
-        reminder_before_end_minutes: reminderBeforeEnd,
-        calendar_sync_interval_minutes: syncInterval,
+        task_buffer_minutes: Number(taskBuffer),
+        reminder_before_start_minutes: Number(remindStart),
+        reminder_before_end_minutes: Number(remindEnd),
+        calendar_sync_interval_minutes: Number(calSyncInterval),
       });
 
       setSaveSuccess(true);
       setTimeout(() => setSaveSuccess(false), 3000);
-    } catch (err: any) {
-      alert(err.response?.data?.error || '保存失败');
+    } catch (err: unknown) {
+      const error = err as { response?: { data?: { error?: string } }; message?: string };
+      alert('保存失败：' + (error.response?.data?.error || error.message || '未知错误'));
     } finally {
       setSaving(false);
     }
   };
 
-  const handleRegenerateToken = async () => {
-    if (!window.confirm('重新生成 Token 后，原有的微信 Webhook 链接将失效，确认继续？')) return;
-    try {
-      await api.post('/settings/regenerate-token');
-      fetchSettings();
-    } catch (err) {
-      alert('重新生成失败');
-    }
-  };
-
-  const copyWebhook = () => {
-    navigator.clipboard.writeText(webhookUrl);
-    setCopiedWebhook(true);
-    setTimeout(() => setCopiedWebhook(false), 2000);
-  };
-
-  // Work Slots helpers
-  const addSlot = () => {
+  const handleAddSlot = () => {
     setWorkSlots([...workSlots, { start: '09:00', end: '12:00' }]);
   };
 
-  const removeSlot = (index: number) => {
-    setWorkSlots(workSlots.filter((_, i) => i !== index));
+  const handleRemoveSlot = (index: number) => {
+    setWorkSlots(workSlots.filter((_, idx) => idx !== index));
   };
 
-  const updateSlot = (index: number, field: 'start' | 'end', value: string) => {
+  const handleSlotChange = (index: number, field: 'start' | 'end', val: string) => {
     const updated = [...workSlots];
-    updated[index][field] = value;
+    updated[index][field] = val;
     setWorkSlots(updated);
   };
 
-  // Calendar Subscriptions helpers
   const handleAddSubscription = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!newSubName.trim() || !newSubUrl.trim()) return;
 
     setAddingSub(true);
     try {
-      const res = await api.post('/calendar/subscriptions', {
-        name: newSubName,
-        url: newSubUrl,
+      await api.post('/calendar/subscriptions', {
+        name: newSubName.trim(),
+        url: newSubUrl.trim(),
       });
-      alert(res.data.message || '添加成功');
       setNewSubName('');
       setNewSubUrl('');
-      fetchSubscriptions();
-    } catch (err: any) {
-      alert(err.response?.data?.error || '添加订阅失败');
+      fetchSubs();
+    } catch (err: unknown) {
+      const error = err as { response?: { data?: { error?: string } }; message?: string };
+      alert('添加失败：' + (error.response?.data?.error || error.message));
     } finally {
       setAddingSub(false);
     }
   };
 
   const handleDeleteSubscription = async (id: number) => {
-    if (!window.confirm('确定要删除该日历订阅及同步的外部事件吗？')) return;
+    if (!confirm('确定要删除此外部日历吗？相关的事件缓存也将被移除。')) return;
     try {
       await api.delete(`/calendar/subscriptions/${id}`);
-      fetchSubscriptions();
-    } catch {
-      alert('删除失败');
+      fetchSubs();
+    } catch (err: unknown) {
+      const error = err as { response?: { data?: { error?: string } }; message?: string };
+      alert('删除失败：' + (error.response?.data?.error || error.message));
     }
   };
 
   const handleSyncNow = async (id: number) => {
     try {
-      const res = await api.post(`/calendar/subscriptions/${id}/sync`);
-      alert(res.data.message);
-      fetchSubscriptions();
-    } catch (err: any) {
-      alert(err.response?.data?.error || '同步出错');
+      await api.post(`/calendar/subscriptions/${id}/sync`);
+      fetchSubs();
+    } catch (err: unknown) {
+      const error = err as { response?: { data?: { error?: string } }; message?: string };
+      alert('同步失败：' + (error.response?.data?.error || error.message));
     }
   };
 
+  const copyIcal = () => {
+    navigator.clipboard.writeText(icalExportUrl);
+    setCopiedIcal(true);
+    setTimeout(() => setCopiedIcal(false), 2000);
+  };
+
   if (loading) {
-    return <div className="p-12 text-center text-slate-400">加载配置中...</div>;
+    return (
+      <div className="flex items-center justify-center min-h-[400px]">
+        <div className="flex items-center gap-3 text-slate-500 font-medium">
+          <RefreshCw className="w-5 h-5 animate-spin text-indigo-600" />
+          <span>正在载入系统偏好设置...</span>
+        </div>
+      </div>
+    );
   }
 
   return (
-    <div className="space-y-8 max-w-5xl mx-auto pb-12">
-      <div className="flex items-center justify-between">
+    <div className="max-w-5xl mx-auto space-y-8 pb-16">
+      {/* Top Page Header */}
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 border-b border-slate-200 pb-5">
         <div>
-          <h2 className="text-xl font-bold text-slate-900">系统偏好与助手对接配置</h2>
-          <p className="text-xs text-slate-500 mt-0.5">
-            配置您的微信 Clawbot、DeepSeek 大模型、多段工作时段与日历同步设置。
+          <h1 className="text-2xl font-black tracking-tight text-slate-900">配置中心 & 微信配对</h1>
+          <p className="text-sm text-slate-500 mt-1">
+            无需繁琐配置，扫码即连微信 Clawbot；全自动日历同步、智能时间规划与提醒机制。
           </p>
         </div>
 
         <button
-          onClick={handleSave}
+          onClick={handleSavePreferences}
           disabled={saving}
-          className="flex items-center gap-2 px-5 py-2.5 bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl text-xs font-semibold shadow-md shadow-indigo-600/20 transition disabled:opacity-50"
+          className="flex items-center justify-center gap-2 px-5 py-2.5 bg-indigo-600 hover:bg-indigo-700 active:scale-95 text-white font-semibold rounded-xl shadow-md shadow-indigo-100 transition disabled:opacity-50"
         >
-          {saving ? (
-            <span className="inline-block animate-spin rounded-full h-4 w-4 border-2 border-white border-t-transparent"></span>
-          ) : saveSuccess ? (
-            <CheckCircle2 className="w-4 h-4 text-emerald-300" />
-          ) : (
-            <Save className="w-4 h-4" />
-          )}
-          <span>{saveSuccess ? '已保存成功！' : '保存所有设置'}</span>
+          {saving ? <RefreshCw className="w-4 h-4 animate-spin" /> : <Save className="w-4 h-4" />}
+          <span>{saving ? '保存中...' : '保存全部配置'}</span>
         </button>
       </div>
 
-      {/* 1. Clawbot Integration Section */}
-      <section className="bg-white rounded-2xl p-6 border border-slate-200 shadow-xs space-y-5">
-        <div className="flex items-center gap-3 border-b border-slate-100 pb-4">
-          <div className="p-2 bg-indigo-50 text-indigo-600 rounded-xl">
-            <Bot className="w-5 h-5" />
-          </div>
-          <div>
-            <h3 className="text-sm font-bold text-slate-900">微信 Clawbot 对接配置</h3>
-            <p className="text-xs text-slate-500">
-              设置 Clawbot 消息推送 Webhook 地址及机器人主动推送微信消息的接口端点
-            </p>
+      {saveSuccess && (
+        <div className="flex items-center gap-2 p-4 bg-emerald-50 border border-emerald-200 text-emerald-800 rounded-2xl text-sm font-medium animate-fadeIn">
+          <CheckCircle2 className="w-5 h-5 text-emerald-600 shrink-0" />
+          <span>所有配置已持久化保存！微信 Clawbot 实时规划及提醒已同步更新。</span>
+        </div>
+      )}
+
+      {/* 1. WeChat Clawbot Pair Section (QR Code) */}
+      <section className="bg-white rounded-3xl p-6 sm:p-8 border border-slate-200/80 shadow-xs relative overflow-hidden">
+        <div className="flex items-center justify-between border-b border-slate-100 pb-5">
+          <div className="flex items-center gap-3.5">
+            <div className="w-11 h-11 rounded-2xl bg-emerald-50 text-emerald-600 flex items-center justify-center shrink-0">
+              <Bot className="w-6 h-6" />
+            </div>
+            <div>
+              <div className="flex items-center gap-2.5">
+                <h2 className="text-base font-bold text-slate-900">微信 Clawbot 对接</h2>
+                {wxConnected ? (
+                  <span className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-xs font-semibold bg-emerald-100 text-emerald-700">
+                    <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse" />
+                    已成功连接
+                  </span>
+                ) : (
+                  <span className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-xs font-semibold bg-amber-100 text-amber-700">
+                    等待微信扫码配对
+                  </span>
+                )}
+              </div>
+              <p className="text-xs text-slate-500 mt-0.5">
+                基于微信官方 iLink 通道直接中转，用户严格隔离，扫码即可与您的专属助手建立联系
+              </p>
+            </div>
           </div>
         </div>
 
-        <div className="space-y-4 text-xs">
-          {/* Inbound Webhook URL */}
-          <div>
-            <label className="block font-semibold text-slate-700 mb-1.5">
-              Clawbot 接收 Webhook 链接 (配置给您的 Clawbot 回调)
-            </label>
-            <div className="flex items-center gap-2">
-              <input
-                type="text"
-                readOnly
-                value={webhookUrl}
-                className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl font-mono text-slate-700 select-all"
-              />
-              <button
-                type="button"
-                onClick={copyWebhook}
-                className="px-4 py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 font-semibold rounded-xl flex items-center gap-1.5 shrink-0 transition"
-              >
-                {copiedWebhook ? <Check className="w-3.5 h-3.5 text-emerald-600" /> : <Copy className="w-3.5 h-3.5" />}
-                <span>{copiedWebhook ? '已复制' : '复制'}</span>
-              </button>
-              <button
-                type="button"
-                onClick={handleRegenerateToken}
-                className="px-3 py-2 text-rose-600 hover:bg-rose-50 border border-rose-200 font-semibold rounded-xl shrink-0 transition"
-              >
-                重置Token
-              </button>
-            </div>
-            <p className="text-[11px] text-slate-400 mt-1">
-              微信 Clawbot 收到用户发来的消息后，请配置其直接 POST 到此 Webhook 链接。
-            </p>
-          </div>
+        <div className="pt-6">
+          {wxConnected ? (
+            <div className="bg-slate-50 border border-slate-200 rounded-2xl p-6 space-y-5">
+              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+                <div className="flex items-center gap-4">
+                  <div className="w-12 h-12 rounded-full bg-emerald-600 text-white flex items-center justify-center font-bold text-lg shadow-sm">
+                    {wxNickname ? wxNickname.slice(0, 1).toUpperCase() : 'W'}
+                  </div>
+                  <div>
+                    <h3 className="font-bold text-slate-900 text-sm">
+                      {wxNickname ? `已绑定微信：${wxNickname}` : '已绑定专属微信账号'}
+                    </h3>
+                    <p className="text-xs font-mono text-slate-500 mt-0.5">
+                      专属通讯 ID: <span className="text-slate-700">{wxUserId || '已加密保护'}</span>
+                    </p>
+                  </div>
+                </div>
 
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-4 pt-2">
-            <div>
-              <label className="block font-semibold text-slate-700 mb-1">
-                Clawbot 发送消息 API 端点 (可选)
-              </label>
-              <input
-                type="text"
-                value={clawbotOutboundUrl}
-                onChange={(e) => setClawbotOutboundUrl(e.target.value)}
-                placeholder="例如：http://127.0.0.1:3000/send"
-                className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl font-mono"
-              />
-              <span className="text-[10px] text-slate-400">用于助手主动发送开始/结束提醒</span>
-            </div>
+                <div className="flex items-center gap-3">
+                  <button
+                    type="button"
+                    onClick={handleSendTestMessage}
+                    disabled={testSending}
+                    className="flex items-center gap-1.5 px-4 py-2 bg-white hover:bg-slate-100 text-slate-700 border border-slate-200 font-semibold text-xs rounded-xl shadow-2xs transition disabled:opacity-50"
+                  >
+                    {testSending ? <RefreshCw className="w-3.5 h-3.5 animate-spin" /> : <Send className="w-3.5 h-3.5 text-indigo-600" />}
+                    <span>{testSending ? '发送中...' : '发送测试微信'}</span>
+                  </button>
+                  <button
+                    type="button"
+                    onClick={handleUnbindWeixin}
+                    className="flex items-center gap-1.5 px-3.5 py-2 bg-rose-50 hover:bg-rose-100 text-rose-600 border border-rose-200 font-semibold text-xs rounded-xl transition"
+                  >
+                    <LogOut className="w-3.5 h-3.5" />
+                    <span>解除配对</span>
+                  </button>
+                </div>
+              </div>
 
-            <div>
-              <label className="block font-semibold text-slate-700 mb-1">
-                Clawbot API Key / 鉴权令牌 (可选)
-              </label>
-              <input
-                type="password"
-                value={clawbotOutboundKey}
-                onChange={(e) => setClawbotOutboundKey(e.target.value)}
-                placeholder="若您的机器人需要 Token"
-                className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl"
-              />
-            </div>
+              {testResult && (
+                <div className="text-xs p-3 bg-white border border-slate-200 rounded-xl text-slate-700 flex items-center gap-2">
+                  <CheckCircle2 className="w-4 h-4 text-emerald-600 shrink-0" />
+                  <span>{testResult}</span>
+                </div>
+              )}
 
-            <div>
-              <label className="block font-semibold text-slate-700 mb-1">
-                您的微信 Wxid / 接收用户 ID (可选)
-              </label>
-              <input
-                type="text"
-                value={clawbotToWxid}
-                onChange={(e) => setClawbotToWxid(e.target.value)}
-                placeholder="微信发送目标用户 wxid"
-                className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl"
-              />
-              <span className="text-[10px] text-slate-400">若留空，助手会在收到您首条消息时自动记录</span>
+              <div className="text-xs text-slate-500 bg-white/70 p-4 rounded-xl border border-slate-200/60 leading-relaxed">
+                💡 <span className="font-semibold text-slate-700">使用提示：</span>现在您可以直接用您的手机微信向此 Clawbot 发送日程安排要求（例如：“帮我规划明天上午写报告两小时，紧急程度高”），助手将自动识别并在控制面板生成 TODO 和日历，并在任务开始与结束前通过微信主动提醒您。
+              </div>
             </div>
-          </div>
+          ) : (
+            <div className="flex flex-col sm:flex-row items-center gap-8 bg-slate-50/70 border border-slate-200/80 rounded-2xl p-6 sm:p-8">
+              {/* QR Code Container */}
+              <div className="flex flex-col items-center shrink-0">
+                <div className="w-52 h-52 bg-white p-3.5 rounded-2xl border-2 border-dashed border-slate-300 shadow-sm flex items-center justify-center relative overflow-hidden group">
+                  {qrStatus === 'loading' && (
+                    <div className="flex flex-col items-center gap-2 text-slate-400 text-xs">
+                      <RefreshCw className="w-6 h-6 animate-spin text-indigo-600" />
+                      <span>生成中...</span>
+                    </div>
+                  )}
+
+                  {(qrStatus === 'wait' || qrStatus === 'scaned') && (
+                    <div className="relative">
+                      {qrCodeImgContent ? (
+                        <QRCodeSVG
+                          value={qrCodeImgContent}
+                          size={180}
+                          level="M"
+                          includeMargin={false}
+                        />
+                      ) : (
+                        <div className="text-xs text-slate-400">二维码生成失败</div>
+                      )}
+
+                      {qrStatus === 'scaned' && (
+                        <div className="absolute inset-0 bg-white/90 backdrop-blur-xs flex flex-col items-center justify-center text-center p-2 rounded-lg">
+                          <CheckCircle2 className="w-8 h-8 text-emerald-600 animate-bounce mb-1" />
+                          <span className="text-xs font-bold text-slate-900">扫码成功</span>
+                          <span className="text-[11px] text-slate-500">请在手机点击允许</span>
+                        </div>
+                      )}
+                    </div>
+                  )}
+
+                  {qrStatus === 'expired' && (
+                    <div className="flex flex-col items-center gap-2 text-center p-2">
+                      <AlertCircle className="w-8 h-8 text-amber-500" />
+                      <span className="text-xs text-slate-600 font-semibold">二维码已过期</span>
+                      <button
+                        onClick={fetchQrCode}
+                        className="text-xs text-indigo-600 hover:underline font-bold"
+                      >
+                        点击重新生成
+                      </button>
+                    </div>
+                  )}
+                </div>
+
+                <button
+                  type="button"
+                  onClick={fetchQrCode}
+                  className="mt-3 flex items-center gap-1.5 text-xs text-indigo-600 hover:text-indigo-700 font-semibold"
+                >
+                  <RefreshCw className="w-3.5 h-3.5" />
+                  <span>刷新二维码</span>
+                </button>
+              </div>
+
+              {/* Instructions */}
+              <div className="space-y-4 text-xs">
+                <div>
+                  <div className="flex items-center gap-2 font-bold text-sm text-slate-900 mb-1">
+                    <QrCode className="w-4 h-4 text-emerald-600" />
+                    <span>微信极速免密配对流程</span>
+                  </div>
+                  <p className="text-slate-500 text-xs leading-relaxed">
+                    我们已在后台使用 Tencent OpenClaw 微信专属中转网关。您无需填写复杂的 Webhook 或申请服务号，仅需 2 步完成绑定：
+                  </p>
+                </div>
+
+                <ol className="space-y-2.5 text-slate-600 list-decimal list-inside font-medium leading-relaxed">
+                  <li>打开手机微信，点击右上角【+】号选择【扫一扫】；</li>
+                  <li>扫描左侧二维码，并在手机微信上点击【允许 / 确认登录】；</li>
+                  <li>系统将自动识别并创建您的专属隔离沙箱会话。</li>
+                </ol>
+
+                <div className="p-3 bg-emerald-50 border border-emerald-100 rounded-xl text-emerald-800 text-[11px] flex items-center gap-2">
+                  <span className="w-2 h-2 rounded-full bg-emerald-500 shrink-0" />
+                  <span>状态指示：{qrStatusMsg}</span>
+                </div>
+              </div>
+            </div>
+          )}
         </div>
       </section>
 
       {/* 2. LLM Config Section */}
-      <section className="bg-white rounded-2xl p-6 border border-slate-200 shadow-xs space-y-5">
-        <div className="flex items-center gap-3 border-b border-slate-100 pb-4">
-          <div className="p-2 bg-amber-50 text-amber-600 rounded-xl">
-            <Brain className="w-5 h-5" />
+      <section className="bg-white rounded-3xl p-6 sm:p-8 border border-slate-200/80 shadow-xs space-y-5">
+        <div className="flex items-center gap-3.5 border-b border-slate-100 pb-5">
+          <div className="w-11 h-11 rounded-2xl bg-amber-50 text-amber-600 flex items-center justify-center shrink-0">
+            <Brain className="w-6 h-6" />
           </div>
           <div>
-            <h3 className="text-sm font-bold text-slate-900">大模型 LLM 配置 (结构化字段抽取)</h3>
-            <p className="text-xs text-slate-500">
-              仅在用户发消息时调用一次以提取任务/状态字段，默认预设为 DeepSeek
+            <h2 className="text-base font-bold text-slate-900">大模型 LLM 配置 (语义提取引擎)</h2>
+            <p className="text-xs text-slate-500 mt-0.5">
+              仅在用户发消息时调用一次以提取任务/状态字段，回复均采用预设模版拼接以保证极速响应
             </p>
           </div>
         </div>
 
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-4 text-xs">
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-5 text-xs">
           <div>
-            <label className="block font-semibold text-slate-700 mb-1">
+            <label className="block font-semibold text-slate-700 mb-1.5">
               API 端点 (Base URL)
             </label>
             <input
@@ -353,26 +549,27 @@ export const SettingsView: React.FC = () => {
               value={llmEndpoint}
               onChange={(e) => setLlmEndpoint(e.target.value)}
               placeholder="https://api.deepseek.com/v1"
-              className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl font-mono"
-              required
+              className="w-full px-3.5 py-2.5 bg-slate-50 border border-slate-200 rounded-xl font-mono text-slate-800 focus:bg-white focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 outline-none transition"
             />
+            <span className="text-[11px] text-slate-400 mt-1 block">兼容 OpenAI 规范，默认预设为 DeepSeek</span>
           </div>
 
           <div>
-            <label className="block font-semibold text-slate-700 mb-1">
-              DeepSeek API Key *
+            <label className="block font-semibold text-slate-700 mb-1.5">
+              API 密钥 (API Key)
             </label>
             <input
               type="password"
               value={llmApiKey}
               onChange={(e) => setLlmApiKey(e.target.value)}
               placeholder="sk-..."
-              className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl font-mono"
+              className="w-full px-3.5 py-2.5 bg-slate-50 border border-slate-200 rounded-xl font-mono text-slate-800 focus:bg-white focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 outline-none transition"
             />
+            <span className="text-[11px] text-slate-400 mt-1 block">密钥直接保存在服务端数据库，加密安全隔离</span>
           </div>
 
           <div>
-            <label className="block font-semibold text-slate-700 mb-1">
+            <label className="block font-semibold text-slate-700 mb-1.5">
               模型型号 (Model)
             </label>
             <input
@@ -380,132 +577,186 @@ export const SettingsView: React.FC = () => {
               value={llmModel}
               onChange={(e) => setLlmModel(e.target.value)}
               placeholder="deepseek-chat"
-              className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl font-mono"
+              className="w-full px-3.5 py-2.5 bg-slate-50 border border-slate-200 rounded-xl font-mono text-slate-800 focus:bg-white focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 outline-none transition"
             />
+            <span className="text-[11px] text-slate-400 mt-1 block">例如: deepseek-chat 或 gpt-4o-mini</span>
           </div>
         </div>
       </section>
 
-      {/* 3. Work Hours & Interval Preferences */}
-      <section className="bg-white rounded-2xl p-6 border border-slate-200 shadow-xs space-y-5">
-        <div className="flex items-center gap-3 border-b border-slate-100 pb-4">
-          <div className="p-2 bg-blue-50 text-blue-600 rounded-xl">
-            <Clock className="w-5 h-5" />
+      {/* 3. Smart Schedule Preferences */}
+      <section className="bg-white rounded-3xl p-6 sm:p-8 border border-slate-200/80 shadow-xs space-y-6">
+        <div className="flex items-center gap-3.5 border-b border-slate-100 pb-5">
+          <div className="w-11 h-11 rounded-2xl bg-indigo-50 text-indigo-600 flex items-center justify-center shrink-0">
+            <Clock className="w-6 h-6" />
           </div>
           <div>
-            <h3 className="text-sm font-bold text-slate-900">工作时间范围与偏好设置</h3>
-            <p className="text-xs text-slate-500">
-              智能排程算法仅会将任务规划在您的工作时段中，并自动避开外部日历冲突
+            <h2 className="text-base font-bold text-slate-900">日程规划算法偏好 & 提醒周期</h2>
+            <p className="text-xs text-slate-500 mt-0.5">
+              配置个人日常作息工作时段、任务缓冲间隔与自动通知机制
             </p>
           </div>
         </div>
 
-        <div className="space-y-4 text-xs">
-          <div>
-            <div className="flex items-center justify-between mb-2">
-              <label className="font-semibold text-slate-700">
-                允许的工作时间段（支持多段，如 9:00-12:00, 13:00-18:00...）
-              </label>
-              <button
-                type="button"
-                onClick={addSlot}
-                className="flex items-center gap-1 text-indigo-600 hover:text-indigo-700 font-semibold"
-              >
-                <Plus className="w-3.5 h-3.5" />
-                <span>添加工作时段</span>
-              </button>
-            </div>
+        {/* Work Time Slots */}
+        <div className="space-y-3">
+          <div className="flex items-center justify-between">
+            <label className="text-xs font-bold text-slate-800 flex items-center gap-1.5">
+              <span>自定义工作/规划时间段 (动态规划将自动避开非工作时段)</span>
+            </label>
+            <button
+              type="button"
+              onClick={handleAddSlot}
+              className="text-xs text-indigo-600 hover:text-indigo-700 font-semibold flex items-center gap-1"
+            >
+              <Plus className="w-3.5 h-3.5" />
+              <span>增加时段</span>
+            </button>
+          </div>
 
-            <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-3">
-              {workSlots.map((slot, index) => (
-                <div
-                  key={index}
-                  className="flex items-center gap-2 p-3 bg-slate-50 border border-slate-200 rounded-xl"
-                >
-                  <input
-                    type="time"
-                    value={slot.start}
-                    onChange={(e) => updateSlot(index, 'start', e.target.value)}
-                    className="bg-white px-2 py-1 border border-slate-200 rounded-lg text-xs"
-                  />
-                  <span className="text-slate-400 font-bold">~</span>
-                  <input
-                    type="time"
-                    value={slot.end}
-                    onChange={(e) => updateSlot(index, 'end', e.target.value)}
-                    className="bg-white px-2 py-1 border border-slate-200 rounded-lg text-xs"
-                  />
+          <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-3">
+            {workSlots.map((slot, index) => (
+              <div
+                key={index}
+                className="flex items-center gap-2 p-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs"
+              >
+                <input
+                  type="time"
+                  value={slot.start}
+                  onChange={(e) => handleSlotChange(index, 'start', e.target.value)}
+                  className="px-2 py-1 bg-white border border-slate-200 rounded-lg text-slate-700 font-mono"
+                />
+                <span className="text-slate-400 font-medium">至</span>
+                <input
+                  type="time"
+                  value={slot.end}
+                  onChange={(e) => handleSlotChange(index, 'end', e.target.value)}
+                  className="px-2 py-1 bg-white border border-slate-200 rounded-lg text-slate-700 font-mono"
+                />
+                {workSlots.length > 1 && (
                   <button
                     type="button"
-                    onClick={() => removeSlot(index)}
-                    className="text-slate-400 hover:text-rose-600 p-1 ml-auto"
+                    onClick={() => handleRemoveSlot(index)}
+                    className="p-1 text-slate-400 hover:text-rose-600 ml-auto transition"
+                    title="删除这时段"
                   >
                     <Trash2 className="w-3.5 h-3.5" />
                   </button>
-                </div>
-              ))}
-            </div>
+                )}
+              </div>
+            ))}
+          </div>
+          <p className="text-[11px] text-slate-400">
+            支持跨夜配置（例如 19:00-24:00 及 00:00-02:00）。所有事件排期均严格安排在上述设定的可用窗口内。
+          </p>
+        </div>
+
+        <div className="grid grid-cols-1 sm:grid-cols-3 gap-5 pt-3 border-t border-slate-100 text-xs">
+          <div>
+            <label className="block font-semibold text-slate-700 mb-1.5">
+              任务间缓冲间隔 (分钟)
+            </label>
+            <input
+              type="number"
+              min="0"
+              max="120"
+              value={taskBuffer}
+              onChange={(e) => setTaskBuffer(Number(e.target.value))}
+              className="w-full px-3.5 py-2.5 bg-slate-50 border border-slate-200 rounded-xl font-mono text-slate-800"
+            />
+            <span className="text-[11px] text-slate-400 mt-1 block">任务排程之间的休息缓冲（推荐 10-15 分钟）</span>
           </div>
 
-          <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 pt-3 border-t border-slate-100">
-            <div>
-              <label className="block font-semibold text-slate-700 mb-1">
-                任务间缓冲间隔（分钟）
-              </label>
-              <input
-                type="number"
-                value={taskBufferMinutes}
-                onChange={(e) => setTaskBufferMinutes(Number(e.target.value))}
-                min={0}
-                max={60}
-                className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl"
-              />
-              <span className="text-[11px] text-slate-400">安排任务时前后预留休息或准备时间</span>
-            </div>
+          <div>
+            <label className="block font-semibold text-slate-700 mb-1.5">
+              事件开始前微信提醒 (分钟)
+            </label>
+            <input
+              type="number"
+              min="1"
+              max="60"
+              value={remindStart}
+              onChange={(e) => setRemindStart(Number(e.target.value))}
+              className="w-full px-3.5 py-2.5 bg-slate-50 border border-slate-200 rounded-xl font-mono text-slate-800"
+            />
+            <span className="text-[11px] text-slate-400 mt-1 block">Clawbot 将提前通过微信提醒准备开始任务</span>
+          </div>
 
-            <div>
-              <label className="block font-semibold text-slate-700 mb-1">
-                开始前提醒周期（提前分钟数）
-              </label>
-              <input
-                type="number"
-                value={reminderBeforeStart}
-                onChange={(e) => setReminderBeforeStart(Number(e.target.value))}
-                min={0}
-                max={60}
-                className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl"
-              />
-              <span className="text-[11px] text-slate-400">日程即将开始前通过微信通知您</span>
-            </div>
-
-            <div>
-              <label className="block font-semibold text-slate-700 mb-1">
-                结束前核对周期（提前分钟数）
-              </label>
-              <input
-                type="number"
-                value={reminderBeforeEnd}
-                onChange={(e) => setReminderBeforeEnd(Number(e.target.value))}
-                min={0}
-                max={60}
-                className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl"
-              />
-              <span className="text-[11px] text-slate-400">快完成时微信询问是否已完成或需延期</span>
-            </div>
+          <div>
+            <label className="block font-semibold text-slate-700 mb-1.5">
+              事件结束前微信确认 (分钟)
+            </label>
+            <input
+              type="number"
+              min="1"
+              max="60"
+              value={remindEnd}
+              onChange={(e) => setRemindEnd(Number(e.target.value))}
+              className="w-full px-3.5 py-2.5 bg-slate-50 border border-slate-200 rounded-xl font-mono text-slate-800"
+            />
+            <span className="text-[11px] text-slate-400 mt-1 block">提醒您是否已完成或需要延长时间</span>
           </div>
         </div>
       </section>
 
-      {/* 4. External Calendar Subscriptions */}
-      <section className="bg-white rounded-2xl p-6 border border-slate-200 shadow-xs space-y-5">
-        <div className="flex items-center gap-3 border-b border-slate-100 pb-4">
-          <div className="p-2 bg-purple-50 text-purple-600 rounded-xl">
-            <Calendar className="w-5 h-5" />
+      {/* 4. Dedicated TODO Calendar Subscription (Export) */}
+      <section className="bg-white rounded-3xl p-6 sm:p-8 border border-slate-200/80 shadow-xs space-y-4">
+        <div className="flex items-center gap-3.5 border-b border-slate-100 pb-5">
+          <div className="w-11 h-11 rounded-2xl bg-blue-50 text-blue-600 flex items-center justify-center shrink-0">
+            <Calendar className="w-6 h-6" />
           </div>
           <div>
-            <h3 className="text-sm font-bold text-slate-900">导入外部日历 (订阅链接定期更新)</h3>
-            <p className="text-xs text-slate-500">
-              导入 Apple / Google Calendar 等订阅链接，系统自动规避忙碌时间段
+            <h2 className="text-base font-bold text-slate-900">TODO List 专用日历订阅 (导出至系统日历)</h2>
+            <p className="text-xs text-slate-500 mt-0.5">
+              包含 Clawbot 为您动态安排的全部待办日程，支持在 iPhone 日历、Mac 日历、Google Calendar 等订阅
+            </p>
+          </div>
+        </div>
+
+        <div className="text-xs space-y-2">
+          <label className="block font-semibold text-slate-700">
+            日历订阅专属 iCal / Webcal 链接 (只读保密)
+          </label>
+          <div className="flex items-center gap-2">
+            <input
+              type="text"
+              readOnly
+              value={icalExportUrl}
+              className="w-full px-3.5 py-2.5 bg-slate-50 border border-slate-200 rounded-xl font-mono text-slate-700 select-all"
+            />
+            <button
+              type="button"
+              onClick={copyIcal}
+              className="px-4 py-2.5 bg-slate-100 hover:bg-slate-200 text-slate-700 font-semibold rounded-xl flex items-center gap-1.5 shrink-0 transition"
+            >
+              {copiedIcal ? <Check className="w-3.5 h-3.5 text-emerald-600" /> : <Copy className="w-3.5 h-3.5" />}
+              <span>{copiedIcal ? '已复制' : '复制订阅链接'}</span>
+            </button>
+            <a
+              href={icalExportUrl.replace(/^https?:/, 'webcal:')}
+              className="px-4 py-2.5 bg-blue-50 hover:bg-blue-100 text-blue-600 font-semibold rounded-xl flex items-center gap-1.5 shrink-0 transition"
+              title="一键调起系统日历添加订阅"
+            >
+              <ExternalLink className="w-3.5 h-3.5" />
+              <span>一键订阅</span>
+            </a>
+          </div>
+          <p className="text-[11px] text-slate-400">
+            在外部日历添加此订阅后，一旦 Clawbot 安排新任务，外部日历将定期自动同步更新。
+          </p>
+        </div>
+      </section>
+
+      {/* 5. External Calendar Subscriptions (Import) */}
+      <section className="bg-white rounded-3xl p-6 sm:p-8 border border-slate-200/80 shadow-xs space-y-5">
+        <div className="flex items-center gap-3.5 border-b border-slate-100 pb-5">
+          <div className="w-11 h-11 rounded-2xl bg-purple-50 text-purple-600 flex items-center justify-center shrink-0">
+            <Calendar className="w-6 h-6" />
+          </div>
+          <div>
+            <h2 className="text-base font-bold text-slate-900">导入外部日历 (订阅链接定期同步)</h2>
+            <p className="text-xs text-slate-500 mt-0.5">
+              导入 Apple / Google Calendar / 飞书 等订阅链接，算法自动规避已有会议与日程冲突
             </p>
           </div>
         </div>
@@ -516,8 +767,8 @@ export const SettingsView: React.FC = () => {
             type="text"
             value={newSubName}
             onChange={(e) => setNewSubName(e.target.value)}
-            placeholder="日历名称 (如：工作日历/学校日程)"
-            className="w-full sm:w-48 px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl"
+            placeholder="日历名称 (例如：公司日常会议 / 课程表)"
+            className="w-full sm:w-56 px-3.5 py-2.5 bg-slate-50 border border-slate-200 rounded-xl focus:bg-white focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 outline-none"
             required
           />
           <input
@@ -525,39 +776,39 @@ export const SettingsView: React.FC = () => {
             value={newSubUrl}
             onChange={(e) => setNewSubUrl(e.target.value)}
             placeholder="订阅链接 (webcal://... 或 https://...ics)"
-            className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl font-mono"
+            className="w-full px-3.5 py-2.5 bg-slate-50 border border-slate-200 rounded-xl font-mono focus:bg-white focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 outline-none"
             required
           />
           <button
             type="submit"
             disabled={addingSub}
-            className="w-full sm:w-auto px-4 py-2 bg-indigo-600 hover:bg-indigo-700 text-white font-semibold rounded-xl shrink-0 transition disabled:opacity-50"
+            className="w-full sm:w-auto px-5 py-2.5 bg-indigo-600 hover:bg-indigo-700 text-white font-semibold rounded-xl shrink-0 transition disabled:opacity-50"
           >
-            {addingSub ? '同步中...' : '添加并同步'}
+            {addingSub ? '正在同步...' : '添加并拉取'}
           </button>
         </form>
 
         {/* List of subscriptions */}
-        <div className="space-y-2 text-xs">
+        <div className="space-y-2.5 text-xs">
           {subs.length === 0 ? (
-            <div className="p-6 text-center text-slate-400 bg-slate-50 rounded-xl">
-              暂未导入外部日历。您可以填入 Apple 日历或 Google 日历的共享/订阅链接。
+            <div className="p-8 text-center text-slate-400 bg-slate-50 rounded-2xl border border-dashed border-slate-200">
+              暂未导入外部日历。填入您日常使用的 Apple 日历或 Google 日历订阅链接，机器人即可掌握您何时忙碌。
             </div>
           ) : (
             subs.map((sub) => (
               <div
                 key={sub.id}
-                className="flex items-center justify-between p-3.5 bg-slate-50 border border-slate-200 rounded-xl"
+                className="flex items-center justify-between p-4 bg-slate-50 border border-slate-200/80 rounded-2xl"
               >
                 <div className="space-y-1 max-w-lg">
                   <div className="flex items-center gap-2">
-                    <span className="font-bold text-slate-800">{sub.name}</span>
+                    <span className="font-bold text-slate-900">{sub.name}</span>
                     <span
                       className={`text-[10px] font-semibold px-2 py-0.5 rounded-full ${
                         sub.sync_status === 'ok' ? 'bg-emerald-100 text-emerald-700' : 'bg-rose-100 text-rose-700'
                       }`}
                     >
-                      {sub.sync_status === 'ok' ? `同步正常 (${sub.event_count}条日程)` : '同步异常'}
+                      {sub.sync_status === 'ok' ? `同步正常 (${sub.event_count} 条日程)` : '同步异常'}
                     </span>
                   </div>
                   <div className="font-mono text-[11px] text-slate-400 truncate max-w-md">{sub.url}</div>
@@ -570,7 +821,7 @@ export const SettingsView: React.FC = () => {
                   <button
                     type="button"
                     onClick={() => handleSyncNow(sub.id)}
-                    className="p-1.5 text-indigo-600 hover:bg-indigo-50 rounded-lg transition"
+                    className="p-2 text-indigo-600 hover:bg-indigo-50 rounded-xl transition"
                     title="立即重新拉取同步"
                   >
                     <RefreshCw className="w-4 h-4" />
@@ -578,7 +829,7 @@ export const SettingsView: React.FC = () => {
                   <button
                     type="button"
                     onClick={() => handleDeleteSubscription(sub.id)}
-                    className="p-1.5 text-rose-500 hover:bg-rose-50 rounded-lg transition"
+                    className="p-2 text-rose-500 hover:bg-rose-50 rounded-xl transition"
                     title="删除订阅"
                   >
                     <Trash2 className="w-4 h-4" />

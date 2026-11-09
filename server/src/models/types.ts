@@ -28,6 +28,13 @@ export interface UserSettings {
   reminder_before_start_minutes: number;
   reminder_before_end_minutes: number;
   calendar_sync_interval_minutes: number;
+  weixin_connected?: number;
+  weixin_bot_token?: string;
+  weixin_bot_id?: string;
+  weixin_user_id?: string;
+  weixin_base_url?: string;
+  weixin_sync_buf?: string;
+  weixin_nickname?: string;
   updated_at: string;
 }
 

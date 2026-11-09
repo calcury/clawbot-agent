@@ -12,6 +12,7 @@ import {
   exportDedicatedIcal,
 } from '../controllers/calendarController.js';
 import { handleClawbotWebhook, testWebhookSimulate } from '../controllers/webhookController.js';
+import { getQRCode, getStatus, unbindWeixin, sendTestMessage } from '../controllers/weixinController.js';
 import { requireAuth, requireAdmin } from '../middleware/auth.js';
 
 export const router = Router();
@@ -30,6 +31,12 @@ router.get('/auth/me', requireAuth, getMe);
 router.get('/settings', requireAuth, getSettings);
 router.put('/settings', requireAuth, updateSettings);
 router.post('/settings/regenerate-token', requireAuth, regenerateWebhookToken);
+
+// WeChat Clawbot iLink Gateway & QR Code Scan
+router.get('/weixin/qrcode', requireAuth, getQRCode);
+router.get('/weixin/status', requireAuth, getStatus);
+router.post('/weixin/unbind', requireAuth, unbindWeixin);
+router.post('/weixin/test-message', requireAuth, sendTestMessage);
 
 // Task / TODO Management
 router.get('/tasks', requireAuth, listTasks);

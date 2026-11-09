@@ -1,5 +1,6 @@
 import axios from 'axios';
 import { Task, UserSettings } from '../models/types.js';
+import { sendWeixinTextMessage } from './weixinGateway.js';
 
 export const templates = {
   /**
@@ -150,9 +151,23 @@ export const templates = {
 };
 
 /**
- * Send message out to WeChat via Clawbot Gateway API
+ * Send message out to WeChat via Weixin iLink or custom Clawbot Gateway API
  */
 export async function sendClawbotMessage(settings: UserSettings, message: string): Promise<boolean> {
+  // 1. If paired via OpenClaw / Tencent Weixin iLink, send directly to user
+  if (settings.weixin_connected && settings.weixin_bot_token && settings.weixin_user_id) {
+    const baseUrl = settings.weixin_base_url || 'https://ilinkai.weixin.qq.com';
+    const sent = await sendWeixinTextMessage(
+      baseUrl,
+      settings.weixin_bot_token,
+      settings.weixin_bot_id || '',
+      settings.weixin_user_id,
+      message
+    );
+    if (sent) return true;
+  }
+
+  // 2. Fallback to custom Clawbot outbound webhook URL if configured
   if (!settings.clawbot_outbound_url) {
     console.log('[Clawbot Outbound Mock] (未配置 outbound_url，直接打印至控制台):');
     console.log(message);

@@ -6,6 +6,7 @@ import { PORT } from './config/env.js';
 import { initDatabase } from './config/database.js';
 import { router as apiRouter } from './routes/api.js';
 import { startReminderScheduler } from './services/reminder.js';
+import { weixinTransitManager } from './services/weixinGateway.js';
 
 const app = express();
 
@@ -36,6 +37,9 @@ if (fs.existsSync(clientDistPath)) {
 
 // Start Background Reminder & Calendar Sync
 startReminderScheduler();
+
+// Start Weixin Message Transit Workers
+weixinTransitManager.startAllActiveWorkers();
 
 app.listen(PORT, '0.0.0.0', () => {
   console.log(`🚀 [Server] Clawbot Agent Backend is running on http://localhost:${PORT}`);

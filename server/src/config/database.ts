@@ -42,6 +42,13 @@ export function initDatabase() {
       reminder_before_start_minutes INTEGER DEFAULT 5,
       reminder_before_end_minutes INTEGER DEFAULT 5,
       calendar_sync_interval_minutes INTEGER DEFAULT 60,
+      weixin_connected INTEGER DEFAULT 0,
+      weixin_bot_token TEXT DEFAULT '',
+      weixin_bot_id TEXT DEFAULT '',
+      weixin_user_id TEXT DEFAULT '',
+      weixin_base_url TEXT DEFAULT 'https://ilinkai.weixin.qq.com',
+      weixin_sync_buf TEXT DEFAULT '',
+      weixin_nickname TEXT DEFAULT '',
       updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
     );
 
@@ -95,6 +102,21 @@ export function initDatabase() {
       updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
     );
   `);
+
+  // Migrate user_settings columns if missing
+  const columns = (db.prepare('PRAGMA table_info(user_settings)').all() as any[]).map(c => c.name);
+  const addCol = (name: string, type: string, def: string) => {
+    if (!columns.includes(name)) {
+      db.exec(`ALTER TABLE user_settings ADD COLUMN ${name} ${type} DEFAULT ${def};`);
+    }
+  };
+  addCol('weixin_connected', 'INTEGER', '0');
+  addCol('weixin_bot_token', 'TEXT', "''");
+  addCol('weixin_bot_id', 'TEXT', "''");
+  addCol('weixin_user_id', 'TEXT', "''");
+  addCol('weixin_base_url', 'TEXT', "'https://ilinkai.weixin.qq.com'");
+  addCol('weixin_sync_buf', 'TEXT', "''");
+  addCol('weixin_nickname', 'TEXT', "''");
 
   // Seed initial admin if database has no users
   const defaultAdminPassword = process.env.ADMIN_DEFAULT_PASSWORD || '86698111';

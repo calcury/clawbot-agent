@@ -1,5 +1,5 @@
 import ical from 'node-ical';
-import icalGenerator, { ICalAlarmType } from 'ical-generator';
+import icalGenerator, { ICalAlarmType, ICalEventStatus } from 'ical-generator';
 import { db } from '../config/database.js';
 import { CalendarSubscription, Task } from '../models/types.js';
 
@@ -31,9 +31,9 @@ export async function syncSubscription(sub: CalendarSubscription): Promise<{ cou
 
     for (const k in events) {
       if (!Object.prototype.hasOwnProperty.call(events, k)) continue;
-      const ev = events[k];
+      const ev = events[k] as any;
 
-      if (ev.type !== 'VEVENT') continue;
+      if (!ev || ev.type !== 'VEVENT') continue;
 
       const title = ev.summary || '无标题外部日程';
       const uid = ev.uid || `${sub.id}-${Date.now()}-${Math.random()}`;
@@ -137,7 +137,7 @@ export function generateUserTodoIcal(userId: number, username: string): string {
         t.deadline ? `截止时间：${new Date(t.deadline).toLocaleString('zh-CN', { timeZone: 'Asia/Shanghai' })}` : '',
         t.notes ? `备注：${t.notes}` : '',
       ].filter(Boolean).join('\n'),
-      status: isCompleted ? 'CONFIRMED' : 'TENTATIVE',
+      status: isCompleted ? ICalEventStatus.CONFIRMED : ICalEventStatus.TENTATIVE,
     });
 
     // 5 minutes before alarm
