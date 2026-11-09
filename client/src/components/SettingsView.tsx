@@ -155,9 +155,9 @@ export const SettingsView: React.FC = () => {
       setQrStatus('loading');
       setQrStatusMsg('正在向微信服务器申请登录二维码...');
       const res = await api.get('/weixin/qrcode');
-      const { qrcode, qrcode_img_content } = res.data;
+      const { qrcode, qrcodeUrl, qrcode_img_content } = res.data;
       setQrCode(qrcode);
-      setQrCodeImgContent(qrcode_img_content);
+      setQrCodeImgContent(qrcodeUrl || qrcode_img_content);
       setQrStatus('wait');
       setQrStatusMsg('请打开手机微信【扫一扫】屏幕二维码');
 
@@ -184,7 +184,7 @@ export const SettingsView: React.FC = () => {
         setQrStatus('confirmed');
         setQrStatusMsg('配对成功！已连接微信助手');
         setWxConnected(true);
-        setWxUserId(data.user_id || '');
+        setWxUserId(data.weixinUserId || data.user_id || '');
         setWxNickname(data.nickname || '');
 
         if (pollTimerRef.current) {
