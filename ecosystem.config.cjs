@@ -2,7 +2,7 @@ module.exports = {
   apps: [
     {
       name: 'clawbot-agent',
-      script: './node_modules/.bin/tsx',
+      script: 'node_modules/tsx/dist/cli.mjs',
       args: 'server/src/index.ts',
       cwd: __dirname,
       autorestart: true,
