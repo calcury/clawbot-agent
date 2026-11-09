@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef, useMemo } from 'react';
 import { api } from '../api/client';
 import { QRCodeSVG } from 'qrcode.react';
 import {
@@ -8,8 +8,6 @@ import {
   Clock,
   Copy,
   Check,
-  Plus,
-  Trash2,
   RefreshCw,
   Save,
   CheckCircle2,
@@ -18,11 +16,125 @@ import {
   Send,
   LogOut,
   ExternalLink,
+  Sparkles,
+  Trash2,
 } from 'lucide-react';
 
 interface WorkSlot {
   start: string;
   end: string;
+}
+
+interface VisualSlot {
+  startMin: number;
+  endMin: number;
+  label: string;
+}
+
+function parseWorkSlotsString(input: string): {
+  slots: WorkSlot[];
+  visualSlots: VisualSlot[];
+  totalMinutes: number;
+  error: string | null;
+} {
+  const trimmed = input.trim();
+  if (!trimmed) {
+    return { slots: [], visualSlots: [], totalMinutes: 0, error: '请输入工作时间段' };
+  }
+
+  // Support English comma, Chinese comma, semicolons, and newlines
+  const parts = trimmed.split(/[,，;\n\r]+/).map((p) => p.trim()).filter(Boolean);
+  if (parts.length === 0) {
+    return { slots: [], visualSlots: [], totalMinutes: 0, error: '请输入工作时间段' };
+  }
+
+  const slots: WorkSlot[] = [];
+  const rawVisual: VisualSlot[] = [];
+
+  for (const part of parts) {
+    const match = part.match(/^(\d{1,2}):(\d{2})\s*[-~至到]\s*(\d{1,2}):(\d{2})$/);
+    if (!match) {
+      return {
+        slots: [],
+        visualSlots: [],
+        totalMinutes: 0,
+        error: `时段 "${part}" 格式不正确，请使用形如 00:00-02:00, 13:00-18:00 的格式`,
+      };
+    }
+
+    const sh = parseInt(match[1], 10);
+    const sm = parseInt(match[2], 10);
+    const eh = parseInt(match[3], 10);
+    const em = parseInt(match[4], 10);
+
+    if (sh < 0 || sh > 24 || sm < 0 || sm > 59) {
+      return { slots: [], visualSlots: [], totalMinutes: 0, error: `时段 "${part}" 开始时间无效` };
+    }
+    if (eh < 0 || eh > 24 || em < 0 || em > 59) {
+      return { slots: [], visualSlots: [], totalMinutes: 0, error: `时段 "${part}" 结束时间无效` };
+    }
+
+    const startFormatted = `${String(sh).padStart(2, '0')}:${String(sm).padStart(2, '0')}`;
+    const endFormatted = `${String(eh).padStart(2, '0')}:${String(em).padStart(2, '0')}`;
+    slots.push({ start: startFormatted, end: endFormatted });
+
+    const sMin = sh * 60 + sm;
+    const eMin = eh * 60 + em;
+
+    if (eMin <= sMin) {
+      // Overnight slot, e.g. 23:00 to 02:00
+      rawVisual.push({
+        startMin: sMin,
+        endMin: 1440,
+        label: `${startFormatted}-24:00`,
+      });
+      if (eMin > 0) {
+        rawVisual.push({
+          startMin: 0,
+          endMin: eMin,
+          label: `00:00-${endFormatted}`,
+        });
+      }
+    } else {
+      rawVisual.push({
+        startMin: sMin,
+        endMin: Math.min(1440, eMin),
+        label: `${startFormatted}-${endFormatted}`,
+      });
+    }
+  }
+
+  // Merge overlapping segments for the progress bar display and total hours calculation
+  const sorted = [...rawVisual].sort((a, b) => a.startMin - b.startMin);
+  const merged: VisualSlot[] = [];
+  for (const cur of sorted) {
+    if (merged.length === 0) {
+      merged.push({ ...cur });
+    } else {
+      const prev = merged[merged.length - 1];
+      if (cur.startMin <= prev.endMin) {
+        if (cur.endMin > prev.endMin) {
+          prev.endMin = cur.endMin;
+          const h1 = Math.floor(prev.startMin / 60);
+          const m1 = prev.startMin % 60;
+          const h2 = Math.floor(prev.endMin / 60);
+          const m2 = prev.endMin % 60;
+          prev.label = `${String(h1).padStart(2, '0')}:${String(m1).padStart(2, '0')}-${String(h2).padStart(2, '0')}:${String(m2).padStart(2, '0')}`;
+        }
+      } else {
+        merged.push({ ...cur });
+      }
+    }
+  }
+
+  const totalMinutes = merged.reduce((sum, s) => sum + (s.endMin - s.startMin), 0);
+
+  return {
+    slots,
+    visualSlots: merged,
+    totalMinutes,
+    error: null,
+  };
 }
 
 interface CalendarSub {
@@ -59,12 +171,17 @@ export const SettingsView: React.FC = () => {
   const [llmModel, setLlmModel] = useState('deepseek-chat');
 
   // Preferences
-  const [workSlots, setWorkSlots] = useState<WorkSlot[]>([
-    { start: '09:00', end: '12:00' },
-    { start: '13:00', end: '18:00' },
-    { start: '19:00', end: '24:00' },
-    { start: '00:00', end: '02:00' },
-  ]);
+  const [workSlotsText, setWorkSlotsText] = useState('00:00-02:00, 13:00-18:00');
+  const parsedSlotsInfo = useMemo(() => {
+    return parseWorkSlotsString(workSlotsText);
+  }, [workSlotsText]);
+
+  const presets = [
+    { label: '示例作息', value: '00:00-02:00, 13:00-18:00' },
+    { label: '标准工时', value: '09:00-12:00, 13:00-18:00' },
+    { label: '全天四段', value: '09:00-12:00, 13:00-18:00, 19:00-24:00, 00:00-02:00' },
+    { label: '夜间/熬夜', value: '13:00-18:00, 19:00-24:00, 00:00-03:00' },
+  ];
   const [taskBuffer, setTaskBuffer] = useState<number>(15);
   const [remindStart, setRemindStart] = useState<number>(10);
   const [remindEnd, setRemindEnd] = useState<number>(5);
@@ -104,9 +221,14 @@ export const SettingsView: React.FC = () => {
 
         if (settings.work_slots) {
           try {
-            setWorkSlots(JSON.parse(settings.work_slots));
+            const parsed = JSON.parse(settings.work_slots);
+            if (Array.isArray(parsed) && parsed.length > 0) {
+              setWorkSlotsText(parsed.map((s: WorkSlot) => `${s.start}-${s.end}`).join(', '));
+            } else if (typeof settings.work_slots === 'string' && settings.work_slots.trim()) {
+              setWorkSlotsText(settings.work_slots);
+            }
           } catch {
-            // fallback
+            setWorkSlotsText(settings.work_slots);
           }
         }
         setTaskBuffer(settings.task_buffer_minutes ?? 15);
@@ -234,6 +356,11 @@ export const SettingsView: React.FC = () => {
 
   const handleSavePreferences = async (e: React.FormEvent) => {
     e.preventDefault();
+    if (parsedSlotsInfo.error) {
+      alert('工作时间段格式有误：' + parsedSlotsInfo.error);
+      return;
+    }
+
     setSaving(true);
     setSaveSuccess(false);
 
@@ -242,7 +369,7 @@ export const SettingsView: React.FC = () => {
         llm_endpoint: llmEndpoint,
         llm_api_key: llmApiKey,
         llm_model: llmModel,
-        work_slots: workSlots,
+        work_slots: parsedSlotsInfo.slots,
         task_buffer_minutes: Number(taskBuffer),
         reminder_before_start_minutes: Number(remindStart),
         reminder_before_end_minutes: Number(remindEnd),
@@ -257,20 +384,6 @@ export const SettingsView: React.FC = () => {
     } finally {
       setSaving(false);
     }
-  };
-
-  const handleAddSlot = () => {
-    setWorkSlots([...workSlots, { start: '09:00', end: '12:00' }]);
-  };
-
-  const handleRemoveSlot = (index: number) => {
-    setWorkSlots(workSlots.filter((_, idx) => idx !== index));
-  };
-
-  const handleSlotChange = (index: number, field: 'start' | 'end', val: string) => {
-    const updated = [...workSlots];
-    updated[index][field] = val;
-    setWorkSlots(updated);
   };
 
   const handleAddSubscription = async (e: React.FormEvent) => {
@@ -598,57 +711,138 @@ export const SettingsView: React.FC = () => {
           </div>
         </div>
 
-        {/* Work Time Slots */}
-        <div className="space-y-3">
-          <div className="flex items-center justify-between">
-            <label className="text-xs font-bold text-slate-800 flex items-center gap-1.5">
-              <span>自定义工作/规划时间段 (动态规划将自动避开非工作时段)</span>
-            </label>
-            <button
-              type="button"
-              onClick={handleAddSlot}
-              className="text-xs text-indigo-600 hover:text-indigo-700 font-semibold flex items-center gap-1"
-            >
-              <Plus className="w-3.5 h-3.5" />
-              <span>增加时段</span>
-            </button>
+        {/* Work Time Slots Manual Text Input & 24h Visual Progress Bar */}
+        <div className="space-y-4">
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+            <div>
+              <label className="text-xs font-bold text-slate-800 flex items-center gap-1.5">
+                <span>自定义工作 / 规划时间段 (手动输入)</span>
+              </label>
+              <p className="text-[11px] text-slate-400 mt-0.5">
+                支持输入多个时间段，格式形如 <span className="font-mono text-slate-700 font-semibold">00:00-02:00, 13:00-18:00</span>（用逗号分隔）
+              </p>
+            </div>
+
+            {/* Quick Presets */}
+            <div className="flex items-center gap-1.5 flex-wrap">
+              <span className="text-[11px] text-slate-400 mr-0.5 flex items-center gap-1">
+                <Sparkles className="w-3 h-3 text-amber-500" />
+                <span>快速填入:</span>
+              </span>
+              {presets.map((preset) => (
+                <button
+                  key={preset.label}
+                  type="button"
+                  onClick={() => setWorkSlotsText(preset.value)}
+                  className="px-2.5 py-1 text-[11px] bg-slate-100 hover:bg-indigo-50 hover:text-indigo-600 text-slate-600 font-medium rounded-lg transition"
+                >
+                  {preset.label}
+                </button>
+              ))}
+            </div>
           </div>
 
-          <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-3">
-            {workSlots.map((slot, index) => (
-              <div
-                key={index}
-                className="flex items-center gap-2 p-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs"
-              >
-                <input
-                  type="time"
-                  value={slot.start}
-                  onChange={(e) => handleSlotChange(index, 'start', e.target.value)}
-                  className="px-2 py-1 bg-white border border-slate-200 rounded-lg text-slate-700 font-mono"
-                />
-                <span className="text-slate-400 font-medium">至</span>
-                <input
-                  type="time"
-                  value={slot.end}
-                  onChange={(e) => handleSlotChange(index, 'end', e.target.value)}
-                  className="px-2 py-1 bg-white border border-slate-200 rounded-lg text-slate-700 font-mono"
-                />
-                {workSlots.length > 1 && (
-                  <button
-                    type="button"
-                    onClick={() => handleRemoveSlot(index)}
-                    className="p-1 text-slate-400 hover:text-rose-600 ml-auto transition"
-                    title="删除这时段"
-                  >
-                    <Trash2 className="w-3.5 h-3.5" />
-                  </button>
-                )}
-              </div>
-            ))}
+          <div>
+            <input
+              type="text"
+              value={workSlotsText}
+              onChange={(e) => setWorkSlotsText(e.target.value)}
+              placeholder="例如：00:00-02:00, 13:00-18:00"
+              className={`w-full px-4 py-2.5 bg-slate-50 border rounded-xl font-mono text-xs tracking-wide text-slate-800 focus:bg-white outline-none transition ${
+                parsedSlotsInfo.error
+                  ? 'border-rose-300 focus:ring-2 focus:ring-rose-400/20 focus:border-rose-500'
+                  : 'border-slate-200 focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500'
+              }`}
+            />
+            {parsedSlotsInfo.error ? (
+              <p className="text-xs text-rose-600 font-medium mt-1.5 flex items-center gap-1.5">
+                <AlertCircle className="w-3.5 h-3.5 shrink-0" />
+                <span>{parsedSlotsInfo.error}</span>
+              </p>
+            ) : (
+              <p className="text-[11px] text-slate-400 mt-1">
+                💡 支持跨夜配置（例如 19:00-24:00 及 00:00-02:00）。动态规划算法将严格仅在亮色可安排时段内插入任务日程。
+              </p>
+            )}
           </div>
-          <p className="text-[11px] text-slate-400">
-            支持跨夜配置（例如 19:00-24:00 及 00:00-02:00）。所有事件排期均严格安排在上述设定的可用窗口内。
-          </p>
+
+          {/* 24-Hour Timeline Visual Progress Bar */}
+          <div className="p-4 bg-slate-50/80 rounded-2xl border border-slate-200/80 space-y-2.5">
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 text-xs">
+              <div className="flex items-center gap-3">
+                <span className="font-bold text-slate-800">全天 24 小时排程进度条</span>
+                <div className="flex items-center gap-3 text-[11px]">
+                  <span className="flex items-center gap-1.5">
+                    <span className="w-3 h-3 rounded-sm bg-emerald-500 inline-block shadow-2xs" />
+                    <span className="font-semibold text-emerald-800">亮色：可安排</span>
+                  </span>
+                  <span className="flex items-center gap-1.5">
+                    <span className="w-3 h-3 rounded-sm bg-slate-300 border border-slate-400/50 inline-block" />
+                    <span className="font-medium text-slate-600">灰色：休息 / 免打扰</span>
+                  </span>
+                </div>
+              </div>
+
+              {!parsedSlotsInfo.error && (
+                <div className="text-[11px] text-slate-500 font-medium">
+                  今日可排程时长：<span className="font-bold text-emerald-600">{(parsedSlotsInfo.totalMinutes / 60).toFixed(1)}</span> 小时 / 24 小时 (
+                  <span className="font-semibold text-slate-700">{Math.round((parsedSlotsInfo.totalMinutes / 1440) * 100)}%</span>)
+                </div>
+              )}
+            </div>
+
+            {/* Visual Bar */}
+            <div className="relative w-full h-8 bg-slate-200 rounded-xl overflow-hidden shadow-inner flex items-center select-none border border-slate-300/70">
+              {/* Highlight Segments (亮色) */}
+              {parsedSlotsInfo.visualSlots.map((slot, idx) => {
+                const leftPct = (slot.startMin / 1440) * 100;
+                const widthPct = ((slot.endMin - slot.startMin) / 1440) * 100;
+                const durationHours = ((slot.endMin - slot.startMin) / 60).toFixed(1);
+
+                return (
+                  <div
+                    key={idx}
+                    style={{
+                      left: `${leftPct}%`,
+                      width: `${widthPct}%`,
+                    }}
+                    title={`可安排时段：${slot.label} (共 ${durationHours} 小时)`}
+                    className="absolute top-0 bottom-0 bg-emerald-500 hover:bg-emerald-600 transition-colors flex items-center justify-center cursor-pointer shadow-xs group"
+                  >
+                    {widthPct >= 5 && (
+                      <span className="text-[10px] text-white font-mono font-bold truncate px-1 text-center select-none drop-shadow-xs">
+                        {slot.label}
+                      </span>
+                    )}
+                  </div>
+                );
+              })}
+
+              {/* Grid Lines at 3h intervals */}
+              {[3, 6, 9, 12, 15, 18, 21].map((hour) => (
+                <div
+                  key={hour}
+                  style={{ left: `${(hour / 24) * 100}%` }}
+                  className="absolute top-0 bottom-0 w-px bg-slate-400/30 pointer-events-none"
+                />
+              ))}
+            </div>
+
+            {/* Hour Axis Scale (00:00 to 24:00) */}
+            <div className="relative w-full h-4">
+              {[0, 3, 6, 9, 12, 15, 18, 21, 24].map((hour) => (
+                <span
+                  key={hour}
+                  style={{ left: `${(hour / 24) * 100}%` }}
+                  className={`absolute text-[10px] font-mono text-slate-400 -translate-x-1/2 ${
+                    hour === 0 ? 'translate-x-0' : hour === 24 ? '-translate-x-full' : ''
+                  }`}
+                >
+                  {String(hour).padStart(2, '0')}:00
+                </span>
+              ))}
+            </div>
+          </div>
         </div>
 
         <div className="grid grid-cols-1 sm:grid-cols-3 gap-5 pt-3 border-t border-slate-100 text-xs">

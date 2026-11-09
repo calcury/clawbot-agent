@@ -151,7 +151,14 @@ export function scheduleTask(
     try {
       workSlots = JSON.parse(settings.work_slots);
     } catch {
-      // fallback
+      // Fallback: parse plain string "00:00-02:00, 13:00-18:00"
+      const parts = settings.work_slots.split(/[,，;\n\r]+/).map(p => p.trim()).filter(Boolean);
+      const parsed: WorkSlot[] = [];
+      for (const p of parts) {
+        const m = p.match(/^(\d{1,2}:\d{2})\s*[-~至到]\s*(\d{1,2}:\d{2})$/);
+        if (m) parsed.push({ start: m[1], end: m[2] });
+      }
+      if (parsed.length > 0) workSlots = parsed;
     }
   }
 

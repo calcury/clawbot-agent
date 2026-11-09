@@ -40,16 +40,30 @@ export function updateSettings(req: AuthenticatedRequest, res: Response): void {
     calendar_sync_interval_minutes,
   } = req.body;
 
-  // Validate work_slots JSON
+  // Validate work_slots JSON or human-friendly string (e.g. "00:00-02:00, 13:00-18:00")
   let workSlotsStr = work_slots;
-  if (typeof work_slots === 'object') {
+  if (typeof work_slots === 'object' && work_slots !== null) {
     workSlotsStr = JSON.stringify(work_slots);
   } else if (typeof work_slots === 'string') {
     try {
-      JSON.parse(work_slots);
+      const parsed = JSON.parse(work_slots);
+      workSlotsStr = JSON.stringify(parsed);
     } catch {
-      res.status(400).json({ error: '工作时段格式错误，需为有效的 JSON 数组' });
-      return;
+      // Parse human string like "00:00-02:00, 13:00-18:00"
+      const parts = work_slots.split(/[,，;\n\r]+/).map((p: string) => p.trim()).filter(Boolean);
+      const parsedSlots: Array<{ start: string; end: string }> = [];
+      for (const part of parts) {
+        const match = part.match(/^(\d{1,2}:\d{2})\s*[-~至到]\s*(\d{1,2}:\d{2})$/);
+        if (match) {
+          parsedSlots.push({ start: match[1], end: match[2] });
+        }
+      }
+      if (parsedSlots.length > 0) {
+        workSlotsStr = JSON.stringify(parsedSlots);
+      } else {
+        res.status(400).json({ error: '工作时段格式错误，需形如 00:00-02:00, 13:00-18:00' });
+        return;
+      }
     }
   }
 
