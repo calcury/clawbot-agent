@@ -196,14 +196,18 @@ export async function sendWeixinTextMessage(
       timeout: 15000,
     });
 
-    const data = resp.data;
-    if (data && data.ret === 0) {
+    const data = resp.data || {};
+    const isError =
+      (data.ret !== undefined && data.ret !== 0) ||
+      (data.errcode !== undefined && data.errcode !== 0);
+
+    if (!isError) {
       addDebugLog('Weixin', 'success', `✅ 微信消息发送成功 (ID: ${data.message_id || 'ok'})`);
       return { success: true, data, message_id: data.message_id, ret: 0 };
     } else {
-      const errMsg = data?.errmsg || `ret=${data?.ret || 'unknown'}`;
+      const errMsg = data.errmsg || `ret=${data.ret ?? data.errcode ?? 'unknown'}`;
       addDebugLog('Weixin', 'error', `❌ 微信消息发送拒绝: ${errMsg}`, data);
-      return { success: false, data, error: errMsg, ret: data?.ret };
+      return { success: false, data, error: errMsg, ret: data.ret ?? data.errcode };
     }
   } catch (err: any) {
     const errDetail = err.response?.data || err.message;
@@ -562,59 +566,72 @@ class WeixinTransitManager {
           }
         );
 
-        const data = resp.data;
-        if (data && data.ret === 0) {
-          if (worker) worker.lastError = undefined;
+        const data = resp.data || {};
+        const isApiError =
+          (data.ret !== undefined && data.ret !== 0) ||
+          (data.errcode !== undefined && data.errcode !== 0);
 
-          if (data.get_updates_buf && data.get_updates_buf !== syncBuf) {
-            db.prepare('UPDATE user_settings SET weixin_sync_buf = ? WHERE user_id = ?').run(data.get_updates_buf, userId);
+        if (isApiError) {
+          const errCode = data.errcode ?? data.ret;
+          const errMsg = data.errmsg || '';
+          if (worker) worker.lastError = `ret=${errCode} errmsg=${errMsg}`;
+          addDebugLog('Weixin', 'warn', `[用户 #${userId}] getupdates 返回错误码: ${errCode} (${errMsg})`);
+          if (errCode === -14) {
+            addDebugLog('Weixin', 'error', `[用户 #${userId}] 微信登录凭证已失效 (errcode -14)，请重新在设置中扫码`);
+            this.stopWorker(userId);
+            break;
           }
-
-          const msgs = data.msgs || [];
-          if (msgs.length > 0) {
-            addDebugLog('Weixin', 'info', `[用户 #${userId}] 收到 ${msgs.length} 条微信消息更新`);
-          }
-
-          for (const msg of msgs) {
-            const fromUserId = msg.from_user_id;
-            // Ignore messages sent by the bot itself
-            if (fromUserId === botId) continue;
-
-            // Cache context_token if present
-            if (msg.context_token) {
-              contextTokenMap.set(userId, msg.context_token);
-              db.prepare('UPDATE user_settings SET weixin_context_token = ? WHERE user_id = ?').run(msg.context_token, userId);
-              addDebugLog('Weixin', 'info', `[用户 #${userId}] 更新会话 context_token 成功`);
-            }
-
-            const itemList = msg.item_list || [];
-            for (const item of itemList) {
-              if (item.type === 1 && item.text_item?.text) {
-                const userText = item.text_item.text.trim();
-                addDebugLog('Weixin', 'info', `📩 微信来信 (用户 #${userId}): "${userText}"`);
-
-                // Process through scheduling pipeline
-                const { replyText } = await processWeChatMessage(userId, userText, fromUserId);
-
-                // Use the context token from msg or memory
-                const activeContextToken = msg.context_token || contextTokenMap.get(userId) || settings.weixin_context_token;
-
-                // Send reply back to user
-                await sendWeixinTextMessage(
-                  baseUrl,
-                  botToken,
-                  botId,
-                  fromUserId,
-                  replyText,
-                  activeContextToken
-                );
-              }
-            }
-          }
-        } else if (data && data.ret !== 0) {
-          if (worker) worker.lastError = `ret=${data.ret} errmsg=${data.errmsg || 'unknown'}`;
-          addDebugLog('Weixin', 'warn', `[用户 #${userId}] getupdates 返回错误码: ${data.ret} (${data.errmsg || ''})`);
           await new Promise((r) => setTimeout(r, 4000));
+          continue;
+        }
+
+        // Valid successful getupdates poll response
+        if (worker) worker.lastError = undefined;
+
+        if (data.get_updates_buf && data.get_updates_buf !== syncBuf) {
+          db.prepare('UPDATE user_settings SET weixin_sync_buf = ? WHERE user_id = ?').run(data.get_updates_buf, userId);
+        }
+
+        const msgs = data.msgs || [];
+        if (msgs.length > 0) {
+          addDebugLog('Weixin', 'info', `[用户 #${userId}] 收到 ${msgs.length} 条微信消息更新`);
+        }
+
+        for (const msg of msgs) {
+          const fromUserId = msg.from_user_id;
+          // Ignore messages sent by the bot itself
+          if (fromUserId === botId) continue;
+
+          // Cache context_token if present
+          if (msg.context_token) {
+            contextTokenMap.set(userId, msg.context_token);
+            db.prepare('UPDATE user_settings SET weixin_context_token = ? WHERE user_id = ?').run(msg.context_token, userId);
+            addDebugLog('Weixin', 'info', `[用户 #${userId}] 更新会话 context_token 成功`);
+          }
+
+          const itemList = msg.item_list || [];
+          for (const item of itemList) {
+            if (item.type === 1 && item.text_item?.text) {
+              const userText = item.text_item.text.trim();
+              addDebugLog('Weixin', 'info', `📩 微信来信 (用户 #${userId}): "${userText}"`);
+
+              // Process through scheduling pipeline
+              const { replyText } = await processWeChatMessage(userId, userText, fromUserId);
+
+              // Use the context token from msg or memory
+              const activeContextToken = msg.context_token || contextTokenMap.get(userId) || settings.weixin_context_token;
+
+              // Send reply back to user
+              await sendWeixinTextMessage(
+                baseUrl,
+                botToken,
+                botId,
+                fromUserId,
+                replyText,
+                activeContextToken
+              );
+            }
+          }
         }
       } catch (err: any) {
         if (signal.aborted) break;
