@@ -56,7 +56,6 @@ export const CalendarView: React.FC = () => {
     fetchEvents();
   }, []);
 
-  // Compute Week Days
   const getWeekDates = (date: Date) => {
     const start = new Date(date);
     const day = start.getDay();
@@ -100,7 +99,6 @@ export const CalendarView: React.FC = () => {
     setTimeout(() => setCopied(false), 2000);
   };
 
-  // Filter events for a specific day
   const getEventsForDay = (day: Date) => {
     const dayStart = new Date(day);
     dayStart.setHours(0, 0, 0, 0);
@@ -115,28 +113,30 @@ export const CalendarView: React.FC = () => {
   };
 
   return (
-    <div className="space-y-6">
-      {/* Top Banner: Dedicated iCal Subscription */}
-      <div className="bg-gradient-to-r from-indigo-900 to-indigo-800 rounded-2xl p-5 text-white shadow-md flex flex-col md:flex-row md:items-center justify-between gap-4">
+    <div className="max-w-5xl mx-auto space-y-5 sm:space-y-6">
+      {/* Top Banner (Google Tasks Card) */}
+      <div className="bg-blue-50/80 dark:bg-[#1e2a38]/60 border border-blue-200/80 dark:border-blue-900/60 rounded-3xl p-5 sm:p-6 text-gray-900 dark:text-gray-100 shadow-xs flex flex-col md:flex-row md:items-center justify-between gap-4 transition-colors">
         <div className="space-y-1">
-          <div className="flex items-center gap-2">
-            <span className="p-1.5 bg-indigo-500/30 rounded-lg">
-              <CalendarCheck2 className="w-5 h-5 text-indigo-300" />
-            </span>
-            <h2 className="text-base font-bold">专用 TODO 订阅日历 (实时同步)</h2>
+          <div className="flex items-center gap-2.5">
+            <div className="w-8 h-8 rounded-full bg-blue-600 text-white flex items-center justify-center">
+              <CalendarCheck2 className="w-4 h-4" />
+            </div>
+            <h2 className="text-sm sm:text-base font-bold text-gray-900 dark:text-gray-100">
+              专用 TODO 订阅日历
+            </h2>
           </div>
-          <p className="text-xs text-indigo-200">
-            支持一键导入 Apple 日历、Google Calendar、Outlook 等客户端，自动随规划动态更新。
+          <p className="text-xs text-gray-600 dark:text-neutral-400">
+            支持一键导入 Apple 日历、Google Calendar、Outlook 等客户端，动态实时排程更新。
           </p>
         </div>
 
-        <div className="flex items-center gap-2 bg-indigo-950/60 p-1.5 rounded-xl border border-indigo-700/50">
-          <span className="text-xs font-mono text-indigo-200 px-2 truncate max-w-[280px]">
+        <div className="flex items-center gap-2 bg-white/90 dark:bg-[#131314]/90 p-1.5 rounded-full border border-blue-200/60 dark:border-blue-900/60 max-w-full">
+          <span className="text-xs font-mono text-gray-600 dark:text-neutral-300 px-3 truncate max-w-[200px] sm:max-w-[280px]">
             {webcalUrl}
           </span>
           <button
             onClick={copySubLink}
-            className="flex items-center gap-1.5 px-3 py-1.5 bg-indigo-600 hover:bg-indigo-500 text-white rounded-lg text-xs font-semibold shadow transition shrink-0"
+            className="flex items-center gap-1.5 px-3.5 py-1.5 bg-blue-600 hover:bg-blue-700 text-white rounded-full text-xs font-medium shadow-xs transition shrink-0 cursor-pointer"
           >
             {copied ? <Check className="w-3.5 h-3.5" /> : <Copy className="w-3.5 h-3.5" />}
             <span>{copied ? '已复制' : '复制订阅链接'}</span>
@@ -145,68 +145,75 @@ export const CalendarView: React.FC = () => {
       </div>
 
       {/* Control Header */}
-      <div className="bg-white rounded-2xl p-4 border border-slate-200 shadow-xs flex flex-wrap items-center justify-between gap-4">
+      <div className="bg-white dark:bg-[#1e1f20] rounded-3xl p-4 sm:p-5 border border-gray-200/80 dark:border-neutral-800/80 shadow-xs flex flex-wrap items-center justify-between gap-3 transition-colors">
         <div className="flex items-center gap-3">
-          <div className="flex items-center bg-slate-100 rounded-xl p-1 border border-slate-200">
+          <div className="flex items-center bg-gray-100 dark:bg-neutral-800 rounded-full p-1 border border-gray-200/60 dark:border-neutral-700/60">
             <button
               onClick={prevPeriod}
-              className="p-1.5 hover:bg-white rounded-lg text-slate-600 transition"
+              className="p-1.5 hover:bg-white dark:hover:bg-neutral-700 rounded-full text-gray-600 dark:text-neutral-300 transition"
+              title="上一周期"
             >
               <ChevronLeft className="w-4 h-4" />
             </button>
             <button
               onClick={today}
-              className="px-3 py-1 text-xs font-semibold text-slate-700 hover:bg-white rounded-lg transition"
+              className="px-3 py-1 text-xs font-medium text-gray-700 dark:text-neutral-200 hover:bg-white dark:hover:bg-neutral-700 rounded-full transition"
             >
               今天
             </button>
             <button
               onClick={nextPeriod}
-              className="p-1.5 hover:bg-white rounded-lg text-slate-600 transition"
+              className="p-1.5 hover:bg-white dark:hover:bg-neutral-700 rounded-full text-gray-600 dark:text-neutral-300 transition"
+              title="下一周期"
             >
               <ChevronRight className="w-4 h-4" />
             </button>
           </div>
 
-          <h3 className="text-base font-bold text-slate-800">
+          <h3 className="text-sm sm:text-base font-bold text-gray-900 dark:text-gray-100">
             {currentDate.toLocaleDateString('zh-CN', { year: 'numeric', month: 'long' })}
           </h3>
         </div>
 
         {/* Legend */}
-        <div className="hidden lg:flex items-center gap-4 text-xs font-medium text-slate-500">
+        <div className="hidden lg:flex items-center gap-4 text-xs text-gray-500 dark:text-neutral-400">
           <div className="flex items-center gap-1.5">
-            <span className="w-3 h-3 rounded-full bg-slate-500"></span>
+            <span className="w-2.5 h-2.5 rounded-full bg-slate-500"></span>
             <span>外部已有日程</span>
           </div>
           <div className="flex items-center gap-1.5">
-            <span className="w-3 h-3 rounded-full bg-blue-500"></span>
+            <span className="w-2.5 h-2.5 rounded-full bg-blue-600"></span>
             <span>Clawbot 规划待办</span>
           </div>
           <div className="flex items-center gap-1.5">
-            <span className="w-3 h-3 rounded-full bg-rose-500"></span>
-            <span>高紧急待办</span>
+            <span className="w-2.5 h-2.5 rounded-full bg-rose-500"></span>
+            <span>特急待办</span>
           </div>
           <div className="flex items-center gap-1.5">
-            <span className="w-3 h-3 rounded-full bg-emerald-500"></span>
+            <span className="w-2.5 h-2.5 rounded-full bg-emerald-500"></span>
             <span>已完成待办</span>
           </div>
         </div>
 
         <div className="flex items-center gap-2">
-          <div className="flex bg-slate-100 p-1 rounded-xl border border-slate-200 text-xs font-medium">
+          {/* View Mode Switcher */}
+          <div className="flex bg-gray-100 dark:bg-neutral-800 p-1 rounded-full border border-gray-200/60 dark:border-neutral-700/60 text-xs font-medium">
             <button
               onClick={() => setViewMode('week')}
-              className={`px-3 py-1 rounded-lg transition ${
-                viewMode === 'week' ? 'bg-white text-indigo-700 font-bold shadow-xs' : 'text-slate-600'
+              className={`px-3 py-1 rounded-full transition ${
+                viewMode === 'week'
+                  ? 'bg-white dark:bg-neutral-700 text-blue-600 dark:text-blue-400 font-semibold shadow-xs'
+                  : 'text-gray-600 dark:text-neutral-400'
               }`}
             >
               周视图
             </button>
             <button
               onClick={() => setViewMode('day')}
-              className={`px-3 py-1 rounded-lg transition ${
-                viewMode === 'day' ? 'bg-white text-indigo-700 font-bold shadow-xs' : 'text-slate-600'
+              className={`px-3 py-1 rounded-full transition ${
+                viewMode === 'day'
+                  ? 'bg-white dark:bg-neutral-700 text-blue-600 dark:text-blue-400 font-semibold shadow-xs'
+                  : 'text-gray-600 dark:text-neutral-400'
               }`}
             >
               日视图
@@ -216,33 +223,33 @@ export const CalendarView: React.FC = () => {
           <button
             onClick={fetchEvents}
             disabled={loading}
-            className="p-2 text-slate-600 hover:text-indigo-600 hover:bg-indigo-50 rounded-xl border border-slate-200 transition"
+            className="p-2 text-gray-500 dark:text-neutral-400 hover:text-blue-600 dark:hover:text-blue-400 hover:bg-blue-50 dark:hover:bg-blue-950/40 rounded-full border border-gray-200 dark:border-neutral-700 transition"
             title="刷新日程"
           >
-            <RefreshCw className={`w-4 h-4 ${loading ? 'animate-spin text-indigo-600' : ''}`} />
+            <RefreshCw className={`w-4 h-4 ${loading ? 'animate-spin text-blue-600' : ''}`} />
           </button>
         </div>
       </div>
 
-      {/* Schedule Calendar Grid */}
-      <div className="bg-white rounded-2xl border border-slate-200 shadow-xs overflow-hidden">
+      {/* Schedule Calendar Grid (Google Material 3 Container) */}
+      <div className="bg-white dark:bg-[#1e1f20] rounded-3xl border border-gray-200/80 dark:border-neutral-800/80 shadow-xs overflow-hidden transition-colors">
         {/* Days Header */}
-        <div className={`grid ${viewMode === 'week' ? 'grid-cols-7' : 'grid-cols-1'} border-b border-slate-200 bg-slate-50/70`}>
+        <div className={`grid ${viewMode === 'week' ? 'grid-cols-7' : 'grid-cols-1'} border-b border-gray-200 dark:border-neutral-800 bg-gray-50/70 dark:bg-[#28292a]/50`}>
           {(viewMode === 'week' ? weekDays : [currentDate]).map((d, idx) => {
             const isToday = d.toDateString() === new Date().toDateString();
             return (
               <div
                 key={idx}
-                className={`p-3 text-center border-r border-slate-200 last:border-r-0 ${
-                  isToday ? 'bg-indigo-50/50' : ''
+                className={`p-2.5 sm:p-3 text-center border-r border-gray-200 dark:border-neutral-800 last:border-r-0 ${
+                  isToday ? 'bg-blue-50/40 dark:bg-blue-950/20' : ''
                 }`}
               >
-                <div className="text-xs text-slate-500">
+                <div className="text-[11px] text-gray-500 dark:text-neutral-400 font-medium">
                   {d.toLocaleDateString('zh-CN', { weekday: 'short' })}
                 </div>
                 <div
-                  className={`text-sm font-bold mt-0.5 inline-block w-7 h-7 rounded-full leading-7 ${
-                    isToday ? 'bg-indigo-600 text-white' : 'text-slate-800'
+                  className={`text-xs sm:text-sm font-semibold mt-0.5 inline-block w-7 h-7 rounded-full leading-7 ${
+                    isToday ? 'bg-blue-600 text-white font-bold' : 'text-gray-900 dark:text-gray-100'
                   }`}
                 >
                   {d.getDate()}
@@ -253,17 +260,21 @@ export const CalendarView: React.FC = () => {
         </div>
 
         {/* Event List by Days */}
-        <div className={`grid ${viewMode === 'week' ? 'grid-cols-1 md:grid-cols-7' : 'grid-cols-1'} min-h-[500px] divide-y md:divide-y-0 md:divide-x divide-slate-200`}>
+        <div
+          className={`grid ${
+            viewMode === 'week' ? 'grid-cols-1 md:grid-cols-7' : 'grid-cols-1'
+          } min-h-[440px] divide-y md:divide-y-0 md:divide-x divide-gray-200 dark:divide-neutral-800`}
+        >
           {(viewMode === 'week' ? weekDays : [currentDate]).map((day, dIdx) => {
             const dayEvents = getEventsForDay(day).sort(
               (a, b) => new Date(a.start).getTime() - new Date(b.start).getTime()
             );
 
             return (
-              <div key={dIdx} className="p-2 space-y-2 bg-slate-50/20">
+              <div key={dIdx} className="p-2 space-y-2 bg-gray-50/20 dark:bg-[#1e1f20]/20">
                 {dayEvents.length === 0 ? (
-                  <div className="h-32 flex flex-col items-center justify-center text-slate-400 text-xs">
-                    <span>无事件安排</span>
+                  <div className="h-28 flex flex-col items-center justify-center text-gray-400 dark:text-neutral-600 text-xs">
+                    <span>无事件</span>
                   </div>
                 ) : (
                   dayEvents.map((ev) => {
@@ -283,11 +294,11 @@ export const CalendarView: React.FC = () => {
                       <div
                         key={ev.id}
                         onClick={() => setSelectedEvent(ev)}
-                        className="p-2.5 rounded-xl text-white text-xs shadow-xs cursor-pointer hover:opacity-90 hover:scale-[1.01] transition space-y-1"
+                        className="p-2.5 rounded-2xl text-white text-xs shadow-xs cursor-pointer hover:opacity-90 hover:scale-[1.01] transition space-y-1"
                         style={{ backgroundColor: ev.backgroundColor }}
                       >
-                        <div className="font-semibold line-clamp-2">{ev.title}</div>
-                        <div className="flex items-center gap-1 opacity-90 text-[11px]">
+                        <div className="font-medium line-clamp-2 leading-snug">{ev.title}</div>
+                        <div className="flex items-center gap-1 opacity-90 text-[10px]">
                           <Clock className="w-3 h-3 shrink-0" />
                           <span>
                             {s} ~ {e}
@@ -309,65 +320,65 @@ export const CalendarView: React.FC = () => {
         </div>
       </div>
 
-      {/* Event Detail Modal */}
+      {/* Event Detail Modal (Google Tasks Surface Dialog) */}
       {selectedEvent && (
-        <div className="fixed inset-0 z-50 bg-black/40 backdrop-blur-xs flex items-center justify-center p-4">
-          <div className="bg-white rounded-2xl max-w-md w-full p-6 shadow-2xl space-y-4 animate-in fade-in zoom-in-95">
+        <div className="fixed inset-0 z-50 bg-black/50 backdrop-blur-xs flex items-center justify-center p-4">
+          <div className="bg-white dark:bg-[#1e1f20] rounded-3xl max-w-md w-full p-6 shadow-2xl space-y-4 border border-gray-200 dark:border-neutral-800 animate-fadeIn transition-colors">
             <div className="flex items-start justify-between">
               <div className="space-y-1">
                 <span
-                  className="inline-block text-[10px] font-bold uppercase px-2 py-0.5 rounded-full text-white"
+                  className="inline-block text-[10px] font-semibold uppercase px-2.5 py-0.5 rounded-full text-white"
                   style={{ backgroundColor: selectedEvent.backgroundColor }}
                 >
                   {selectedEvent.extendedProps?.type === 'external' ? '外部日历日程' : 'Clawbot 规划待办'}
                 </span>
-                <h4 className="text-base font-bold text-slate-900">{selectedEvent.title}</h4>
+                <h4 className="text-base font-bold text-gray-900 dark:text-gray-100">{selectedEvent.title}</h4>
               </div>
               <button
                 onClick={() => setSelectedEvent(null)}
-                className="text-slate-400 hover:text-slate-600 text-lg font-bold p-1"
+                className="w-7 h-7 rounded-full text-gray-400 dark:text-neutral-400 hover:bg-gray-100 dark:hover:bg-neutral-800 flex items-center justify-center text-sm font-bold transition"
               >
                 ✕
               </button>
             </div>
 
-            <div className="bg-slate-50 rounded-xl p-3 space-y-2 text-xs text-slate-600">
+            <div className="bg-gray-50 dark:bg-[#28292a] rounded-2xl p-4 space-y-2 text-xs text-gray-600 dark:text-neutral-300">
               <div className="flex justify-between">
-                <span className="text-slate-400">开始时间：</span>
-                <span className="font-semibold text-slate-800">
+                <span className="text-gray-400 dark:text-neutral-500">开始时间：</span>
+                <span className="font-semibold text-gray-800 dark:text-gray-200">
                   {new Date(selectedEvent.start).toLocaleString('zh-CN', { timeZone: 'Asia/Shanghai' })}
                 </span>
               </div>
               <div className="flex justify-between">
-                <span className="text-slate-400">结束时间：</span>
-                <span className="font-semibold text-slate-800">
+                <span className="text-gray-400 dark:text-neutral-500">结束时间：</span>
+                <span className="font-semibold text-gray-800 dark:text-gray-200">
                   {new Date(selectedEvent.end).toLocaleString('zh-CN', { timeZone: 'Asia/Shanghai' })}
                 </span>
               </div>
               {selectedEvent.extendedProps?.type === 'task' && (
                 <>
                   <div className="flex justify-between">
-                    <span className="text-slate-400">预估耗时：</span>
-                    <span className="font-semibold text-slate-800">
+                    <span className="text-gray-400 dark:text-neutral-500">预估耗时：</span>
+                    <span className="font-semibold text-gray-800 dark:text-gray-200">
                       {selectedEvent.extendedProps.duration} 分钟
                     </span>
                   </div>
                   <div className="flex justify-between">
-                    <span className="text-slate-400">紧急程度 / 重要程度：</span>
-                    <span className="font-semibold text-indigo-600">
+                    <span className="text-gray-400 dark:text-neutral-500">紧急 / 重要度：</span>
+                    <span className="font-semibold text-blue-600 dark:text-blue-400">
                       紧急 {selectedEvent.extendedProps.urgency}/5 · 重要 {selectedEvent.extendedProps.importance}/5
                     </span>
                   </div>
                   <div className="flex justify-between">
-                    <span className="text-slate-400">任务状态：</span>
-                    <span className="font-semibold uppercase text-emerald-600">
+                    <span className="text-gray-400 dark:text-neutral-500">任务状态：</span>
+                    <span className="font-semibold uppercase text-emerald-600 dark:text-emerald-400">
                       {selectedEvent.extendedProps.status}
                     </span>
                   </div>
                   {selectedEvent.extendedProps.deadline && (
                     <div className="flex justify-between">
-                      <span className="text-slate-400">截止 DDL：</span>
-                      <span className="font-semibold text-rose-600">
+                      <span className="text-gray-400 dark:text-neutral-500">截止 DDL：</span>
+                      <span className="font-semibold text-rose-600 dark:text-rose-400">
                         {new Date(selectedEvent.extendedProps.deadline).toLocaleString('zh-CN')}
                       </span>
                     </div>
@@ -378,7 +389,7 @@ export const CalendarView: React.FC = () => {
 
             <button
               onClick={() => setSelectedEvent(null)}
-              className="w-full py-2.5 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-xl text-xs font-semibold transition"
+              className="w-full py-2.5 bg-gray-100 dark:bg-neutral-800 hover:bg-gray-200 dark:hover:bg-neutral-700 text-gray-700 dark:text-neutral-200 rounded-full text-xs font-medium transition cursor-pointer"
             >
               关闭
             </button>

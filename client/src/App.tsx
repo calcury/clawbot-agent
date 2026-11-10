@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { AuthProvider, useAuth } from './context/AuthContext';
+import { ThemeProvider } from './context/ThemeContext';
 import { AuthPage } from './pages/AuthPage';
 import { Navbar } from './components/Navbar';
 import { CalendarView } from './components/CalendarView';
@@ -11,7 +12,7 @@ import { api } from './api/client';
 
 const DashboardContent: React.FC = () => {
   const { user, loading } = useAuth();
-  const [activeTab, setActiveTab] = useState('calendar');
+  const [activeTab, setActiveTab] = useState('todos'); // default to Google Tasks Todo list!
   const [pendingCount, setPendingCount] = useState(0);
 
   const fetchPendingCount = async () => {
@@ -30,10 +31,10 @@ const DashboardContent: React.FC = () => {
 
   if (loading) {
     return (
-      <div className="min-h-screen bg-slate-900 flex items-center justify-center">
+      <div className="min-h-screen bg-[#f8fafd] dark:bg-[#131314] flex items-center justify-center">
         <div className="flex flex-col items-center gap-3">
-          <div className="animate-spin rounded-full h-8 w-8 border-3 border-indigo-500 border-t-transparent"></div>
-          <span className="text-slate-400 text-xs font-medium">系统加载中...</span>
+          <div className="animate-spin rounded-full h-8 w-8 border-3 border-blue-600 dark:border-blue-400 border-t-transparent"></div>
+          <span className="text-gray-500 dark:text-neutral-400 text-xs font-medium">Clawbot Tasks 加载中...</span>
         </div>
       </div>
     );
@@ -44,16 +45,17 @@ const DashboardContent: React.FC = () => {
   }
 
   return (
-    <div className="min-h-screen bg-slate-50 flex flex-col text-slate-800">
+    <div className="min-h-screen bg-[#f8fafd] dark:bg-[#131314] flex flex-col text-gray-900 dark:text-gray-100 transition-colors">
       <Navbar
         activeTab={activeTab}
         setActiveTab={setActiveTab}
         pendingUsersCount={pendingCount}
       />
 
-      <main className="flex-1 max-w-7xl w-full mx-auto px-4 sm:px-6 lg:px-8 py-8">
-        {activeTab === 'calendar' && <CalendarView />}
+      {/* Main Container with responsive padding for mobile bottom bar */}
+      <main className="flex-1 max-w-7xl w-full mx-auto px-3.5 sm:px-6 lg:px-8 py-5 sm:py-8 pb-24 sm:pb-10">
         {activeTab === 'todos' && <TodoList />}
+        {activeTab === 'calendar' && <CalendarView />}
         {activeTab === 'settings' && <SettingsView />}
         {activeTab === 'chat' && <ChatSimulator />}
         {activeTab === 'admin' && user.role === 'admin' && (
@@ -61,8 +63,8 @@ const DashboardContent: React.FC = () => {
         )}
       </main>
 
-      <footer className="bg-white border-t border-slate-200 py-4 text-center text-xs text-slate-400">
-        Clawbot Agent · 微信时间规划助手 (管理控制台运行于端口 5178)
+      <footer className="hidden sm:block bg-white dark:bg-[#1e1f20] border-t border-gray-200/80 dark:border-neutral-800/80 py-4 text-center text-xs text-gray-400 dark:text-neutral-500 transition-colors">
+        Clawbot Tasks · 微信智能时间规划助手 (服务端口 5178)
       </footer>
     </div>
   );
@@ -70,9 +72,11 @@ const DashboardContent: React.FC = () => {
 
 export const App: React.FC = () => {
   return (
-    <AuthProvider>
-      <DashboardContent />
-    </AuthProvider>
+    <ThemeProvider>
+      <AuthProvider>
+        <DashboardContent />
+      </AuthProvider>
+    </ThemeProvider>
   );
 };
 
