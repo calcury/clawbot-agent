@@ -246,19 +246,3 @@ export async function handleClawbotWebhook(req: Request, res: Response): Promise
     reply: replyText,
   });
 }
-
-/**
- * Endpoint for testing Webhook directly from Management Dashboard
- */
-export async function testWebhookSimulate(req: Request, res: Response): Promise<void> {
-  const { token, content } = req.body;
-  if (!token || !content) {
-    res.status(400).json({ error: '缺少 token 或 content' });
-    return;
-  }
-
-  // Wrap into handleClawbotWebhook logic
-  req.params = { token };
-  req.body = { content };
-  await handleClawbotWebhook(req, res);
-}

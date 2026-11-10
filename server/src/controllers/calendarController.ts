@@ -90,9 +90,11 @@ export function getCalendarEvents(req: AuthenticatedRequest, res: Response): voi
 
   // 1. External events
   const externalEvents = db.prepare(`
-    SELECT id, uid, title, start_time as start, end_time as end, is_all_day
-    FROM external_events
-    WHERE user_id = ? AND end_time >= ? AND start_time <= ?
+    SELECT ee.id, ee.uid, ee.title, ee.start_time as start, ee.end_time as end, ee.is_all_day, ee.subscription_id,
+           cs.name as subscription_name
+    FROM external_events ee
+    LEFT JOIN calendar_subscriptions cs ON cs.id = ee.subscription_id
+    WHERE ee.user_id = ? AND ee.end_time >= ? AND ee.start_time <= ?
   `).all(userId, startIso, endIso) as any[];
 
   // 2. Scheduled tasks
@@ -111,14 +113,18 @@ export function getCalendarEvents(req: AuthenticatedRequest, res: Response): voi
   const formattedEvents = [
     ...externalEvents.map(ev => ({
       id: `ext-${ev.id}`,
-      title: `[外部] ${ev.title}`,
+      title: ev.title,
       start: ev.start,
       end: ev.end,
       allDay: Boolean(ev.is_all_day),
-      backgroundColor: '#64748b', // Slate grey
-      borderColor: '#475569',
+      subscriptionId: ev.subscription_id,
+      subscriptionName: ev.subscription_name || '外部日程',
+      backgroundColor: '#0284c7', // Sky / Cyan
+      borderColor: '#0284c7',
       extendedProps: {
         type: 'external',
+        subscriptionId: ev.subscription_id,
+        subscriptionName: ev.subscription_name || '外部日程',
       },
     })),
     ...tasks.map(t => {
@@ -148,7 +154,19 @@ export function getCalendarEvents(req: AuthenticatedRequest, res: Response): voi
     }),
   ];
 
-  res.json({ events: formattedEvents });
+  const subscriptions = db.prepare(`
+    SELECT
+      cs.*,
+      (SELECT count(*) FROM external_events WHERE subscription_id = cs.id) as event_count
+    FROM calendar_subscriptions cs
+    WHERE cs.user_id = ?
+    ORDER BY cs.created_at DESC
+  `).all(userId);
+
+  res.json({
+    events: formattedEvents,
+    subscriptions,
+  });
 }
 
 /**

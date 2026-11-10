@@ -11,7 +11,7 @@ import {
   getCalendarEvents,
   exportDedicatedIcal,
 } from '../controllers/calendarController.js';
-import { handleClawbotWebhook, testWebhookSimulate } from '../controllers/webhookController.js';
+import { handleClawbotWebhook } from '../controllers/webhookController.js';
 import { getQRCode, getStatus, unbindWeixin, sendTestMessage } from '../controllers/weixinController.js';
 import { requireAuth, requireAdmin } from '../middleware/auth.js';
 
@@ -22,7 +22,6 @@ router.post('/auth/register', register);
 router.post('/auth/login', login);
 router.get('/calendar/subscribe/:token.ics', exportDedicatedIcal);
 router.post('/webhook/clawbot/:token', handleClawbotWebhook);
-router.post('/webhook/simulate', testWebhookSimulate);
 
 // ================= Protected Routes =================
 router.get('/auth/me', requireAuth, getMe);

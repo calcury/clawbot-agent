@@ -6,7 +6,6 @@ import { Navbar } from './components/Navbar';
 import { CalendarView } from './components/CalendarView';
 import { TodoList } from './components/TodoList';
 import { SettingsView } from './components/SettingsView';
-import { ChatSimulator } from './components/ChatSimulator';
 import { AdminUsersView } from './components/AdminUsersView';
 import { api } from './api/client';
 
@@ -52,12 +51,11 @@ const DashboardContent: React.FC = () => {
         pendingUsersCount={pendingCount}
       />
 
-      {/* Main Container with responsive padding for mobile bottom bar */}
-      <main className="flex-1 max-w-7xl w-full mx-auto px-3.5 sm:px-6 lg:px-8 py-5 sm:py-8 pb-24 sm:pb-10">
+      {/* Main Container with spacious width and responsive padding for mobile bottom bar */}
+      <main className="flex-1 w-full max-w-[1600px] mx-auto px-3 sm:px-6 lg:px-8 py-4 sm:py-6 pb-20 sm:pb-6">
         {activeTab === 'todos' && <TodoList />}
         {activeTab === 'calendar' && <CalendarView />}
         {activeTab === 'settings' && <SettingsView />}
-        {activeTab === 'chat' && <ChatSimulator />}
         {activeTab === 'admin' && user.role === 'admin' && (
           <AdminUsersView onRefreshCount={fetchPendingCount} />
         )}
