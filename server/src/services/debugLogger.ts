@@ -11,6 +11,11 @@ const MAX_LOGS = 600;
 const logBuffer: LogEntry[] = [];
 let logIdCounter = 1;
 
+// Keep original console references to avoid duplicate capture
+const originalConsoleLog = console.log;
+const originalConsoleWarn = console.warn;
+const originalConsoleError = console.error;
+
 export function addDebugLog(
   module: LogEntry['module'],
   level: LogEntry['level'],
@@ -31,14 +36,14 @@ export function addDebugLog(
     logBuffer.shift();
   }
 
-  // Also print to standard console
+  // Print to standard console without triggering intercepted re-capture
   const prefix = `[${entry.module}] [${entry.level.toUpperCase()}]`;
   if (level === 'error') {
-    console.error(prefix, message, details || '');
+    originalConsoleError(prefix, message, details || '');
   } else if (level === 'warn') {
-    console.warn(prefix, message, details || '');
+    originalConsoleWarn(prefix, message, details || '');
   } else {
-    console.log(prefix, message, details || '');
+    originalConsoleLog(prefix, message, details || '');
   }
 
   return entry;
@@ -59,11 +64,6 @@ export function clearLogs(): void {
   logBuffer.length = 0;
   addDebugLog('System', 'info', '调试日志缓冲区已重置清空');
 }
-
-// Hook console.log to also capture uncaught events
-const originalConsoleLog = console.log;
-const originalConsoleWarn = console.warn;
-const originalConsoleError = console.error;
 
 export function installConsoleInterceptor() {
   console.log = (...args: any[]) => {
