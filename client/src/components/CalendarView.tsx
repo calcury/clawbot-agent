@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useMemo, useRef } from 'react';
 import { api } from '../api/client';
 import { useAuth } from '../context/AuthContext';
+import { useTheme } from '../context/ThemeContext';
 import {
   ChevronLeft,
   ChevronRight,
@@ -242,6 +243,7 @@ function getTaskQuadrant(importance: number, urgency: number) {
 
 export const CalendarView: React.FC = () => {
   const { user } = useAuth();
+  const { isDark } = useTheme();
   const [weekStart, setWeekStart] = useState(() => startOfWeek(new Date()));
   const [events, setEvents] = useState<CalendarEventItem[]>([]);
   const [tasks, setTasks] = useState<TaskItem[]>([]);
@@ -673,7 +675,7 @@ export const CalendarView: React.FC = () => {
           className="flex-1 bg-white dark:bg-[#1e1f20] border border-gray-200/80 dark:border-neutral-800/80 rounded-2xl shadow-xs overflow-y-auto overflow-x-auto relative transition-colors"
         >
           <div
-            className="grid min-w-[760px]"
+            className="grid min-w-[760px] bg-white dark:bg-[#1e1f20]"
             style={{
               gridTemplateColumns: '54px repeat(7, minmax(0, 1fr))',
             }}
@@ -686,8 +688,10 @@ export const CalendarView: React.FC = () => {
               return (
                 <div
                   key={`head-${d.key}`}
-                  className={`sticky top-0 z-30 h-11 flex flex-col items-center justify-center border-l border-b border-gray-200 dark:border-neutral-800 bg-white dark:bg-[#1e1f20] transition-colors ${
-                    isToday ? 'bg-blue-50/50 dark:bg-blue-950/30' : ''
+                  className={`sticky top-0 z-30 h-11 flex flex-col items-center justify-center border-l border-b border-gray-200 dark:border-neutral-800 transition-colors ${
+                    isToday
+                      ? 'bg-blue-50 dark:bg-[#1e2738]'
+                      : 'bg-white dark:bg-[#1e1f20]'
                   }`}
                 >
                   <span
@@ -713,13 +717,13 @@ export const CalendarView: React.FC = () => {
             })}
 
             {/* Row 2: Sticky All-Day Row */}
-            <div className="sticky top-11 z-20 min-h-[28px] bg-gray-50/90 dark:bg-[#252627]/90 border-b border-gray-200 dark:border-neutral-800 flex items-center justify-end px-2 text-[9px] uppercase font-bold text-gray-400 font-mono tracking-wider">
+            <div className="sticky top-[44px] z-20 min-h-[28px] bg-gray-50 dark:bg-[#252627] border-b border-gray-200 dark:border-neutral-800 flex items-center justify-end px-2 text-[9px] uppercase font-bold text-gray-400 font-mono tracking-wider">
               全天
             </div>
             {dayData.map((d) => (
               <div
                 key={`allday-${d.key}`}
-                className="sticky top-11 z-20 min-h-[28px] bg-gray-50/90 dark:bg-[#252627]/90 border-l border-b border-gray-200 dark:border-neutral-800 p-1 flex flex-col gap-1"
+                className="sticky top-[44px] z-20 min-h-[28px] bg-gray-50 dark:bg-[#252627] border-l border-b border-gray-200 dark:border-neutral-800 p-1 flex flex-col gap-1"
               >
                 {d.allDay.map((item) => (
                   <button
@@ -736,7 +740,7 @@ export const CalendarView: React.FC = () => {
 
             {/* Row 3: Time Axis (07:00 to 24:00 + Rest Hours 01:00-07:00) */}
             <div
-              className="relative border-r border-gray-200 dark:border-neutral-800 select-none"
+              className="relative border-r border-gray-200 dark:border-neutral-800 select-none bg-white dark:bg-[#1e1f20]"
               style={{ height: gridHeight }}
             >
               {DAY_HOURS.map((hour) => (
@@ -776,8 +780,9 @@ export const CalendarView: React.FC = () => {
                 style={{
                   top: restTop,
                   height: restHeight,
-                  backgroundImage:
-                    'repeating-linear-gradient(-45deg, transparent, transparent 6px, rgba(150,150,150,0.08) 6px, rgba(150,150,150,0.08) 12px)',
+                  backgroundImage: isDark
+                    ? 'repeating-linear-gradient(-45deg, transparent, transparent 6px, rgba(255,255,255,0.04) 6px, rgba(255,255,255,0.04) 12px)'
+                    : 'repeating-linear-gradient(-45deg, transparent, transparent 6px, rgba(150,150,150,0.08) 6px, rgba(150,150,150,0.08) 12px)',
                 }}
               />
             </div>
@@ -786,7 +791,7 @@ export const CalendarView: React.FC = () => {
             {dayData.map((d) => (
               <div
                 key={`col-${d.key}`}
-                className="relative border-l border-gray-200 dark:border-neutral-800"
+                className="relative border-l border-gray-200 dark:border-neutral-800 bg-white dark:bg-[#1e1f20]"
                 style={{ height: gridHeight }}
               >
                 {/* Hourly faint divider lines */}
@@ -804,8 +809,9 @@ export const CalendarView: React.FC = () => {
                   style={{
                     top: restTop,
                     height: restHeight,
-                    backgroundImage:
-                      'repeating-linear-gradient(-45deg, transparent, transparent 7px, rgba(150,150,150,0.07) 7px, rgba(150,150,150,0.07) 14px)',
+                    backgroundImage: isDark
+                      ? 'repeating-linear-gradient(-45deg, transparent, transparent 7px, rgba(255,255,255,0.04) 7px, rgba(255,255,255,0.04) 14px)'
+                      : 'repeating-linear-gradient(-45deg, transparent, transparent 7px, rgba(150,150,150,0.07) 7px, rgba(150,150,150,0.07) 14px)',
                   }}
                 />
 
@@ -842,7 +848,9 @@ export const CalendarView: React.FC = () => {
                         left: `${leftPct}%`,
                         width: `calc(${widthPct}% - 3px)`,
                         borderLeft: `3.5px solid ${seg.color}`,
-                        backgroundColor: `color-mix(in srgb, ${seg.color} 15%, var(--tw-bg-opacity, #ffffff))`,
+                        backgroundColor: isDark
+                          ? `color-mix(in srgb, ${seg.color} 24%, #232426)`
+                          : `color-mix(in srgb, ${seg.color} 15%, #ffffff)`,
                       }}
                     >
                       <div className="flex items-center gap-1 font-mono text-[9px] text-gray-500 dark:text-neutral-400 font-semibold truncate leading-none">

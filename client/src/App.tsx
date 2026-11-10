@@ -12,8 +12,20 @@ import { api } from './api/client';
 
 const DashboardContent: React.FC = () => {
   const { user, loading } = useAuth();
-  const [activeTab, setActiveTab] = useState('todos'); // default to Google Tasks Todo list!
+  const [activeTab, setActiveTab] = useState<string>('todos');
   const [pendingCount, setPendingCount] = useState(0);
+
+  // New user default to settings, returning user default to todos
+  useEffect(() => {
+    if (user?.id) {
+      const onboardedKey = `clawbot_user_onboarded_${user.id}`;
+      const hasOnboarded = localStorage.getItem(onboardedKey);
+      if (!hasOnboarded) {
+        localStorage.setItem(onboardedKey, 'true');
+        setActiveTab('settings');
+      }
+    }
+  }, [user?.id]);
 
   const fetchPendingCount = async () => {
     if (user?.role === 'admin') {
