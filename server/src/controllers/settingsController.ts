@@ -1,5 +1,6 @@
 import { Response } from 'express';
 import crypto from 'crypto';
+import OpenAI from 'openai';
 import { db } from '../config/database.js';
 import { AuthenticatedRequest } from '../middleware/auth.js';
 import { UserSettings } from '../models/types.js';
@@ -118,4 +119,49 @@ export function regenerateWebhookToken(req: AuthenticatedRequest, res: Response)
   `).run(newToken, userId);
 
   res.json({ message: 'Webhook Token 已重新生成', token: newToken });
+}
+
+export async function testLlmApiKey(req: AuthenticatedRequest, res: Response): Promise<void> {
+  const userId = req.user!.id;
+  const { llm_endpoint, llm_api_key, llm_model } = req.body;
+
+  const endpoint = llm_endpoint || 'https://api.deepseek.com/v1';
+  let apiKey = llm_api_key;
+  if (!apiKey || !apiKey.trim()) {
+    const s = db.prepare('SELECT llm_api_key FROM user_settings WHERE user_id = ?').get(userId) as UserSettings | undefined;
+    apiKey = s?.llm_api_key;
+  }
+
+  if (!apiKey || !apiKey.trim()) {
+    res.status(400).json({ success: false, error: '未输入或未保存 API Key，请先填入密钥' });
+    return;
+  }
+
+  try {
+    const client = new OpenAI({
+      baseURL: endpoint,
+      apiKey: apiKey.trim(),
+      timeout: 12000,
+    });
+
+    await client.chat.completions.create({
+      model: llm_model || 'deepseek-chat',
+      messages: [{ role: 'user', content: 'hi' }],
+      max_tokens: 5,
+    });
+
+    res.json({
+      success: true,
+      message: 'DeepSeek API Key 验证有效！模型连接正常。',
+    });
+  } catch (err: any) {
+    const errorMsg =
+      err.response?.data?.error?.message ||
+      err.message ||
+      'API Key 校验失败，请检查 endpoint 或 key 是否正确';
+    res.status(400).json({
+      success: false,
+      error: errorMsg,
+    });
+  }
 }

@@ -250,34 +250,23 @@ export const TodoList: React.FC = () => {
   ];
 
   return (
-    <div className="w-full flex-1 min-h-0 flex flex-col space-y-3 overflow-hidden">
-      {/* Top Banner & Quick Stats */}
-      <div className="shrink-0 flex flex-col sm:flex-row sm:items-center justify-between gap-3 pb-1">
-        <div>
-          <h1 className="text-xl sm:text-2xl font-bold tracking-tight text-gray-900 dark:text-gray-100">
-            我的待办任务
-          </h1>
-          <p className="text-xs sm:text-sm text-gray-500 dark:text-neutral-400 mt-0.5">
-            四象限动态优先级排程 · 微信 Clawbot 智能时间规划
-          </p>
-        </div>
-
-        <div className="flex items-center gap-2">
-          <button
-            onClick={() => fetchTasks()}
-            className="flex items-center gap-1.5 px-3 py-1.5 bg-white dark:bg-[#1e1f20] hover:bg-gray-100 dark:hover:bg-neutral-800 text-gray-600 dark:text-neutral-300 border border-gray-200/80 dark:border-neutral-700/80 rounded-full text-xs font-medium transition cursor-pointer"
-          >
-            <RefreshCw className={`w-3.5 h-3.5 ${loading ? 'animate-spin text-blue-600' : ''}`} />
-            <span>刷新</span>
-          </button>
-          <button
-            onClick={() => setShowModal(true)}
-            className="flex items-center gap-2 px-4 py-2 bg-blue-600 hover:bg-blue-700 active:scale-95 text-white rounded-full text-xs sm:text-sm font-medium shadow-xs transition cursor-pointer"
-          >
-            <Plus className="w-4 h-4" />
-            <span>添加任务</span>
-          </button>
-        </div>
+    <div className="w-full flex-1 min-h-0 flex flex-col space-y-2.5 overflow-hidden">
+      {/* Top Actions */}
+      <div className="shrink-0 flex items-center justify-end gap-2">
+        <button
+          onClick={() => fetchTasks()}
+          className="flex items-center gap-1.5 px-3 py-1.5 bg-white dark:bg-[#1e1f20] hover:bg-gray-100 dark:hover:bg-neutral-800 text-gray-600 dark:text-neutral-300 border border-gray-200/80 dark:border-neutral-700/80 rounded-full text-xs font-medium transition cursor-pointer"
+        >
+          <RefreshCw className={`w-3.5 h-3.5 ${loading ? 'animate-spin text-blue-600' : ''}`} />
+          <span>刷新</span>
+        </button>
+        <button
+          onClick={() => setShowModal(true)}
+          className="flex items-center gap-2 px-4 py-1.5 bg-blue-600 hover:bg-blue-700 active:scale-95 text-white rounded-full text-xs font-medium shadow-xs transition cursor-pointer"
+        >
+          <Plus className="w-4 h-4" />
+          <span>添加任务</span>
+        </button>
       </div>
 
       {/* 左右排版: Left Sidebar (Categories + Quick Add) / Right Main (Task List) */}

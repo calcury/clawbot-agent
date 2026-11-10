@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useRef, useMemo } from 'react';
 import { api } from '../api/client';
+import { useAuth } from '../context/AuthContext';
 import { QRCodeSVG } from 'qrcode.react';
 import {
   Bot,
@@ -17,6 +18,8 @@ import {
   LogOut,
   Trash2,
   Bell,
+  ChevronRight,
+  Sparkles,
 } from 'lucide-react';
 
 interface WorkSlot {
@@ -190,6 +193,76 @@ export const SettingsView: React.FC = () => {
   // iCal export urls
   const [icalExportUrl, setIcalExportUrl] = useState('');
   const [copiedIcal, setCopiedIcal] = useState(false);
+
+  const { user } = useAuth();
+  const userId = user?.id ? String(user.id) : 'default';
+
+  // Visited sections for "日程规划/提醒通知点开过"
+  const [visitedSections, setVisitedSections] = useState<Set<string>>(() => {
+    try {
+      const saved = localStorage.getItem(`clawbot_visited_${userId}`);
+      return saved ? new Set(JSON.parse(saved)) : new Set(['weixin']);
+    } catch {
+      return new Set(['weixin']);
+    }
+  });
+
+  // Track activeSection visit
+  useEffect(() => {
+    setVisitedSections((prev) => {
+      if (prev.has(activeSection)) return prev;
+      const next = new Set(prev).add(activeSection);
+      try {
+        localStorage.setItem(`clawbot_visited_${userId}`, JSON.stringify([...next]));
+      } catch {}
+      return next;
+    });
+  }, [activeSection, userId]);
+
+  // LLM testing state
+  const [llmTesting, setLlmTesting] = useState(false);
+  const [llmTestResult, setLlmTestResult] = useState<{ success: boolean; msg: string } | null>(null);
+  const [llmApiKeyValid, setLlmApiKeyValid] = useState<boolean>(() => {
+    return localStorage.getItem(`clawbot_llm_valid_${userId}`) === 'true';
+  });
+
+  const handleTestLlmKey = async () => {
+    if (!llmApiKey.trim()) {
+      alert('请先输入 DeepSeek API Key');
+      return;
+    }
+    setLlmTesting(true);
+    setLlmTestResult(null);
+    try {
+      const res = await api.post('/settings/test-llm', {
+        llm_endpoint: llmEndpoint,
+        llm_api_key: llmApiKey,
+        llm_model: llmModel,
+      });
+      setLlmTestResult({ success: true, msg: res.data.message || 'API Key 验证有效！' });
+      setLlmApiKeyValid(true);
+      localStorage.setItem(`clawbot_llm_valid_${userId}`, 'true');
+    } catch (err: unknown) {
+      const error = err as { response?: { data?: { error?: string } }; message?: string };
+      const msg = error.response?.data?.error || error.message || '验证失败，请检查 API Key';
+      setLlmTestResult({ success: false, msg });
+      setLlmApiKeyValid(false);
+      localStorage.removeItem(`clawbot_llm_valid_${userId}`);
+    } finally {
+      setLlmTesting(false);
+    }
+  };
+
+  const sectionOrder = ['weixin', 'scheduler', 'notification', 'llm', 'calendar'] as const;
+
+  const handleNextStep = () => {
+    const currentIndex = sectionOrder.indexOf(activeSection);
+    if (currentIndex < sectionOrder.length - 1) {
+      setActiveSection(sectionOrder[currentIndex + 1]);
+    } else {
+      setActiveSection(sectionOrder[0]);
+    }
+  };
 
   // Cleanup polling on unmount
   useEffect(() => {
@@ -437,74 +510,97 @@ export const SettingsView: React.FC = () => {
     );
   }
 
+  const isWeixinDone = Boolean(wxConnected);
+  const isSchedulerDone = visitedSections.has('scheduler');
+  const isNotificationDone = visitedSections.has('notification');
+  const isLlmDone = Boolean(llmApiKeyValid);
+  const isCalendarDone = subs.length > 0;
+
   const navMenuItems = [
     {
       id: 'weixin' as const,
       label: '微信 Clawbot 对接',
       desc: '扫码配对与微信消息通知',
       icon: Bot,
-      badge: wxConnected ? '已连接' : '待配对',
-      badgeColor: wxConnected
-        ? 'bg-emerald-100 text-emerald-700 dark:bg-emerald-950/80 dark:text-emerald-300'
-        : 'bg-amber-100 text-amber-700 dark:bg-amber-950/80 dark:text-amber-300',
+      isDone: isWeixinDone,
     },
     {
       id: 'scheduler' as const,
       label: '日程规划算法偏好',
       desc: '作息时段与 24h 可视化',
       icon: Clock,
+      isDone: isSchedulerDone,
     },
     {
       id: 'notification' as const,
       label: '提醒通知与前置周期',
       desc: '任务开始/结束提前提醒',
       icon: Bell,
+      isDone: isNotificationDone,
     },
     {
       id: 'llm' as const,
       label: '大模型 DeepSeek',
       desc: '语义抽取与任务解析 API',
       icon: Brain,
-      badge: llmApiKey ? '已配置' : '未设置',
-      badgeColor: llmApiKey
-        ? 'bg-blue-100 text-blue-700 dark:bg-blue-950/80 dark:text-blue-300'
-        : 'bg-gray-100 text-gray-600 dark:bg-neutral-800 dark:text-neutral-400',
+      isDone: isLlmDone,
     },
     {
       id: 'calendar' as const,
       label: '外部日历订阅源',
       desc: '双向防冲突与 iCal 导出',
       icon: Calendar,
-      badge: subs.length > 0 ? `${subs.length}个源` : undefined,
-      badgeColor: 'bg-purple-100 text-purple-700 dark:bg-purple-950/80 dark:text-purple-300',
+      isDone: isCalendarDone,
     },
   ];
 
-  return (
-    <div className="w-full flex-1 min-h-0 flex flex-col space-y-3 sm:space-y-4 overflow-hidden">
-      {/* Page Header (Google Tasks Style) */}
-      <div className="shrink-0 flex flex-col sm:flex-row sm:items-center justify-between gap-3 pb-1">
-        <div>
-          <h1 className="text-xl sm:text-2xl font-bold tracking-tight text-gray-900 dark:text-gray-100">
-            设置与偏好配置
-          </h1>
-          <p className="text-xs sm:text-sm text-gray-500 dark:text-neutral-400 mt-0.5">
-            管理微信配对、日程规划偏好、提醒周期与大模型参数
-          </p>
+  const renderCardHeader = (
+    icon: React.ReactNode,
+    title: string,
+    subtitle: string,
+    statusBadge?: React.ReactNode
+  ) => (
+    <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pb-4 border-b border-gray-100 dark:border-neutral-800">
+      <div className="flex items-center gap-3">
+        <div className="w-10 h-10 rounded-xl flex items-center justify-center shrink-0">
+          {icon}
         </div>
-
-        <button
-          onClick={handleSavePreferences}
-          disabled={saving}
-          className="flex items-center justify-center gap-2 px-6 py-2 bg-blue-600 hover:bg-blue-700 active:scale-95 text-white font-medium text-xs sm:text-sm rounded-full shadow-xs transition disabled:opacity-50 cursor-pointer self-start sm:self-auto"
-        >
-          {saving ? <RefreshCw className="w-4 h-4 animate-spin" /> : <Save className="w-4 h-4" />}
-          <span>{saving ? '保存中...' : '保存更改'}</span>
-        </button>
+        <div>
+          <div className="flex items-center gap-2 flex-wrap">
+            <h2 className="text-base font-bold text-gray-900 dark:text-gray-100">{title}</h2>
+            {statusBadge}
+          </div>
+          <p className="text-xs text-gray-500 dark:text-neutral-400 mt-0.5">{subtitle}</p>
+        </div>
       </div>
 
+      <div className="flex items-center gap-2 self-end sm:self-center shrink-0">
+        <button
+          type="button"
+          onClick={handleSavePreferences}
+          disabled={saving}
+          className="flex items-center gap-1.5 px-3.5 py-1.5 bg-gray-50 dark:bg-[#28292a] hover:bg-gray-100 dark:hover:bg-neutral-800 text-gray-700 dark:text-neutral-200 border border-gray-200 dark:border-neutral-700 font-medium text-xs rounded-full shadow-2xs transition disabled:opacity-50 cursor-pointer"
+        >
+          {saving ? <RefreshCw className="w-3.5 h-3.5 animate-spin text-blue-600" /> : <Save className="w-3.5 h-3.5 text-blue-600 dark:text-blue-400" />}
+          <span>{saving ? '保存中...' : '保存更改'}</span>
+        </button>
+
+        <button
+          type="button"
+          onClick={handleNextStep}
+          className="flex items-center gap-1 px-4 py-1.5 bg-blue-600 hover:bg-blue-700 active:scale-95 text-white font-semibold text-xs rounded-full shadow-xs transition cursor-pointer"
+        >
+          <span>{activeSection === 'calendar' ? '回到第一步' : '下一步'}</span>
+          <ChevronRight className="w-3.5 h-3.5 stroke-[2.5]" />
+        </button>
+      </div>
+    </div>
+  );
+
+  return (
+    <div className="w-full flex-1 min-h-0 flex flex-col space-y-2.5 overflow-hidden">
       {saveSuccess && (
-        <div className="shrink-0 flex items-center gap-2.5 p-3 bg-emerald-50 dark:bg-emerald-950/40 border border-emerald-200 dark:border-emerald-800/80 text-emerald-800 dark:text-emerald-300 rounded-2xl text-xs sm:text-sm font-medium animate-fadeIn">
+        <div className="shrink-0 flex items-center gap-2 px-3.5 py-2 bg-emerald-50 dark:bg-emerald-950/40 border border-emerald-200 dark:border-emerald-800/80 text-emerald-800 dark:text-emerald-300 rounded-xl text-xs font-medium animate-fadeIn">
           <CheckCircle2 className="w-4 h-4 text-emerald-600 dark:text-emerald-400 shrink-0" />
           <span>配置已成功保存！算法排程与微信提醒设置已即时生效。</span>
         </div>
@@ -527,11 +623,7 @@ export const SettingsView: React.FC = () => {
             >
               <Icon className="w-3.5 h-3.5" />
               <span>{item.label.split(' ')[0]}</span>
-              {item.badge && (
-                <span className={`text-[9px] px-1.5 py-0.2 rounded-full ${isActive ? 'bg-white/20 text-white' : item.badgeColor}`}>
-                  {item.badge}
-                </span>
-              )}
+              <span className={`w-2 h-2 rounded-full ${item.isDone ? 'bg-emerald-500' : 'bg-amber-500'}`} />
             </button>
           );
         })}
@@ -541,8 +633,11 @@ export const SettingsView: React.FC = () => {
       <div className="flex-1 min-h-0 flex flex-col lg:flex-row gap-4 items-stretch overflow-hidden">
         {/* Left Column: Vertical Nav List */}
         <aside className="hidden lg:flex flex-col w-72 xl:w-80 shrink-0 bg-white dark:bg-[#1e1f20] rounded-2xl border border-gray-200/80 dark:border-neutral-800/80 p-3 shadow-xs space-y-1.5 overflow-y-auto scrollbar-thin">
-          <div className="text-[11px] font-semibold tracking-wider uppercase text-gray-400 dark:text-neutral-500 px-3 py-1.5">
-            配置目录
+          <div className="text-[11px] font-semibold tracking-wider uppercase text-gray-400 dark:text-neutral-500 px-3 py-1.5 flex items-center justify-between">
+            <span>配置目录</span>
+            <span className="font-mono text-[10px] text-gray-500 dark:text-neutral-400">
+              {[isWeixinDone, isSchedulerDone, isNotificationDone, isLlmDone, isCalendarDone].filter(Boolean).length}/5 已完成
+            </span>
           </div>
           {navMenuItems.map((item) => {
             const Icon = item.icon;
@@ -569,9 +664,15 @@ export const SettingsView: React.FC = () => {
                 <div className="flex-1 min-w-0">
                   <div className="flex items-center justify-between gap-1">
                     <span className="text-xs font-bold truncate">{item.label}</span>
-                    {item.badge && (
-                      <span className={`text-[10px] px-1.5 py-0.2 rounded-full font-mono shrink-0 ${item.badgeColor}`}>
-                        {item.badge}
+                    {item.isDone ? (
+                      <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-semibold bg-emerald-100 dark:bg-emerald-950/80 text-emerald-700 dark:text-emerald-300 border border-emerald-300/70 dark:border-emerald-800 shrink-0">
+                        <span className="w-1.5 h-1.5 rounded-full bg-emerald-500" />
+                        已完成
+                      </span>
+                    ) : (
+                      <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-semibold bg-amber-100 dark:bg-amber-950/80 text-amber-700 dark:text-amber-300 border border-amber-300/70 dark:border-amber-800 shrink-0">
+                        <span className="w-1.5 h-1.5 rounded-full bg-amber-500" />
+                        未完成
                       </span>
                     )}
                   </div>
@@ -589,29 +690,23 @@ export const SettingsView: React.FC = () => {
           {/* 1. WeChat Pairing Section */}
           {activeSection === 'weixin' && (
             <div className="space-y-5 animate-fadeIn">
-              <div className="flex items-center gap-3 pb-4 border-b border-gray-100 dark:border-neutral-800">
-                <div className="w-10 h-10 rounded-xl bg-emerald-50 dark:bg-emerald-950/60 text-emerald-600 dark:text-emerald-400 flex items-center justify-center shrink-0">
+              {renderCardHeader(
+                <div className="w-10 h-10 rounded-xl bg-emerald-50 dark:bg-emerald-950/60 text-emerald-600 dark:text-emerald-400 flex items-center justify-center">
                   <Bot className="w-5 h-5" />
-                </div>
-                <div>
-                  <div className="flex items-center gap-2 flex-wrap">
-                    <h2 className="text-base font-bold text-gray-900 dark:text-gray-100">微信 Clawbot 对接</h2>
-                    {wxConnected ? (
-                      <span className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-xs font-semibold bg-emerald-100 dark:bg-emerald-950/70 text-emerald-700 dark:text-emerald-300">
-                        <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse" />
-                        已连接
-                      </span>
-                    ) : (
-                      <span className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-xs font-semibold bg-amber-100 dark:bg-amber-950/70 text-amber-700 dark:text-amber-300">
-                        等待扫码配对
-                      </span>
-                    )}
-                  </div>
-                  <p className="text-xs text-gray-500 dark:text-neutral-400 mt-0.5">
-                    扫码绑定个人微信，日程提醒、排程进度与长图预览将直接下发到手机微信
-                  </p>
-                </div>
-              </div>
+                </div>,
+                '微信 Clawbot 对接',
+                '扫码绑定个人微信，日程提醒、排程进度与长图预览将直接下发到手机微信',
+                wxConnected ? (
+                  <span className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-xs font-semibold bg-emerald-100 dark:bg-emerald-950/70 text-emerald-700 dark:text-emerald-300">
+                    <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse" />
+                    已连接
+                  </span>
+                ) : (
+                  <span className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-xs font-semibold bg-amber-100 dark:bg-amber-950/70 text-amber-700 dark:text-amber-300">
+                    等待扫码配对
+                  </span>
+                )
+              )}
 
               {wxConnected ? (
                 <div className="bg-gray-50 dark:bg-[#28292a] border border-gray-200/80 dark:border-neutral-700/80 rounded-2xl p-5 space-y-4">
@@ -768,19 +863,17 @@ export const SettingsView: React.FC = () => {
           {/* 2. Scheduler Work Slots & Visual Timeline */}
           {activeSection === 'scheduler' && (
             <div className="space-y-5 animate-fadeIn">
-              <div className="flex items-center gap-3 pb-4 border-b border-gray-100 dark:border-neutral-800">
-                <div className="w-10 h-10 rounded-xl bg-blue-50 dark:bg-blue-950/60 text-blue-600 dark:text-blue-400 flex items-center justify-center shrink-0">
+              {renderCardHeader(
+                <div className="w-10 h-10 rounded-xl bg-blue-50 dark:bg-blue-950/60 text-blue-600 dark:text-blue-400 flex items-center justify-center">
                   <Clock className="w-5 h-5" />
-                </div>
-                <div>
-                  <h2 className="text-base font-bold text-gray-900 dark:text-gray-100">
-                    日程规划算法偏好
-                  </h2>
-                  <p className="text-xs text-gray-500 dark:text-neutral-400 mt-0.5">
-                    配置工作作息时段、24小时可用工时分布与任务缓冲间隔
-                  </p>
-                </div>
-              </div>
+                </div>,
+                '日程规划算法偏好',
+                '配置工作作息时段、24小时可用工时分布与任务缓冲间隔',
+                <span className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-xs font-semibold bg-emerald-100 dark:bg-emerald-950/70 text-emerald-700 dark:text-emerald-300">
+                  <span className="w-1.5 h-1.5 rounded-full bg-emerald-500" />
+                  已完成
+                </span>
+              )}
 
               {/* Manual Work Slots Input */}
               <div className="space-y-4">
@@ -911,19 +1004,17 @@ export const SettingsView: React.FC = () => {
           {/* 3. Notification & Reminder Cycles */}
           {activeSection === 'notification' && (
             <div className="space-y-5 animate-fadeIn">
-              <div className="flex items-center gap-3 pb-4 border-b border-gray-100 dark:border-neutral-800">
-                <div className="w-10 h-10 rounded-xl bg-rose-50 dark:bg-rose-950/60 text-rose-600 dark:text-rose-400 flex items-center justify-center shrink-0">
+              {renderCardHeader(
+                <div className="w-10 h-10 rounded-xl bg-rose-50 dark:bg-rose-950/60 text-rose-600 dark:text-rose-400 flex items-center justify-center">
                   <Bell className="w-5 h-5" />
-                </div>
-                <div>
-                  <h2 className="text-base font-bold text-gray-900 dark:text-gray-100">
-                    提醒通知与前置周期
-                  </h2>
-                  <p className="text-xs text-gray-500 dark:text-neutral-400 mt-0.5">
-                    设置任务开始前与结束前主动推送微信通知的提前量与防重复策略
-                  </p>
-                </div>
-              </div>
+                </div>,
+                '提醒通知与前置周期',
+                '设置任务开始前与结束前主动推送微信通知的提前量与防重复策略',
+                <span className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-xs font-semibold bg-emerald-100 dark:bg-emerald-950/70 text-emerald-700 dark:text-emerald-300">
+                  <span className="w-1.5 h-1.5 rounded-full bg-emerald-500" />
+                  已完成
+                </span>
+              )}
 
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-5 text-xs">
                 {/* Start reminder */}
@@ -1015,19 +1106,23 @@ export const SettingsView: React.FC = () => {
           {/* 4. LLM Config Section */}
           {activeSection === 'llm' && (
             <div className="space-y-5 animate-fadeIn">
-              <div className="flex items-center gap-3 pb-4 border-b border-gray-100 dark:border-neutral-800">
-                <div className="w-10 h-10 rounded-xl bg-amber-50 dark:bg-amber-950/60 text-amber-600 dark:text-amber-400 flex items-center justify-center shrink-0">
+              {renderCardHeader(
+                <div className="w-10 h-10 rounded-xl bg-amber-50 dark:bg-amber-950/60 text-amber-600 dark:text-amber-400 flex items-center justify-center">
                   <Brain className="w-5 h-5" />
-                </div>
-                <div>
-                  <h2 className="text-base font-bold text-gray-900 dark:text-gray-100">
-                    大语言模型配置 (LLM)
-                  </h2>
-                  <p className="text-xs text-gray-500 dark:text-neutral-400 mt-0.5">
-                    从微信用户消息中抽取任务名称、预计耗时、加急度、重要度与截止时间 (DDL)
-                  </p>
-                </div>
-              </div>
+                </div>,
+                '大语言模型配置 (LLM)',
+                '从微信用户消息中抽取任务名称、预计耗时、加急度、重要度与截止时间 (DDL)',
+                isLlmDone ? (
+                  <span className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-xs font-semibold bg-emerald-100 dark:bg-emerald-950/70 text-emerald-700 dark:text-emerald-300">
+                    <span className="w-1.5 h-1.5 rounded-full bg-emerald-500" />
+                    验证有效 (已完成)
+                  </span>
+                ) : (
+                  <span className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-xs font-semibold bg-amber-100 dark:bg-amber-950/70 text-amber-700 dark:text-amber-300">
+                    待测试验证 (未完成)
+                  </span>
+                )
+              )}
 
               <div className="space-y-4 text-xs max-w-xl">
                 <div>
@@ -1051,7 +1146,13 @@ export const SettingsView: React.FC = () => {
                   <input
                     type="password"
                     value={llmApiKey}
-                    onChange={(e) => setLlmApiKey(e.target.value)}
+                    onChange={(e) => {
+                      setLlmApiKey(e.target.value);
+                      if (llmApiKeyValid) {
+                        setLlmApiKeyValid(false);
+                        localStorage.removeItem(`clawbot_llm_valid_${userId}`);
+                      }
+                    }}
                     placeholder="sk-..."
                     className="w-full px-3.5 py-2.5 bg-gray-50 dark:bg-[#28292a] border border-gray-200 dark:border-neutral-700 rounded-xl font-mono text-gray-800 dark:text-gray-100 outline-none transition focus:bg-white dark:focus:bg-[#232425] focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500"
                   />
@@ -1071,6 +1172,36 @@ export const SettingsView: React.FC = () => {
                   />
                   <span className="text-[11px] text-gray-400 dark:text-neutral-500 mt-1 block">推荐 deepseek-chat 或兼容 OpenAI 的模型名称</span>
                 </div>
+
+                <div className="flex items-center gap-2.5 pt-2">
+                  <button
+                    type="button"
+                    onClick={handleTestLlmKey}
+                    disabled={llmTesting || !llmApiKey.trim()}
+                    className="flex items-center gap-1.5 px-4 py-2 bg-blue-50 dark:bg-blue-950/60 hover:bg-blue-100 dark:hover:bg-blue-900/60 text-blue-700 dark:text-blue-300 border border-blue-200 dark:border-blue-800 font-medium text-xs rounded-xl shadow-2xs transition disabled:opacity-50 cursor-pointer"
+                  >
+                    {llmTesting ? <RefreshCw className="w-3.5 h-3.5 animate-spin" /> : <Sparkles className="w-3.5 h-3.5" />}
+                    <span>{llmTesting ? '正在验证 API Key...' : '测试 API Key 有效性'}</span>
+                  </button>
+
+                  {isLlmDone && (
+                    <span className="flex items-center gap-1 text-xs text-emerald-600 dark:text-emerald-400 font-semibold">
+                      <CheckCircle2 className="w-4 h-4" />
+                      <span>验证有效 (已完成)</span>
+                    </span>
+                  )}
+                </div>
+
+                {llmTestResult && (
+                  <div className={`p-3 rounded-xl border text-xs flex items-center gap-2 animate-fadeIn ${
+                    llmTestResult.success
+                      ? 'bg-emerald-50 dark:bg-emerald-950/40 border-emerald-200 dark:border-emerald-800 text-emerald-800 dark:text-emerald-300'
+                      : 'bg-rose-50 dark:bg-rose-950/40 border-rose-200 dark:border-rose-800 text-rose-800 dark:text-rose-300'
+                  }`}>
+                    {llmTestResult.success ? <CheckCircle2 className="w-4 h-4 text-emerald-600 shrink-0" /> : <AlertCircle className="w-4 h-4 text-rose-600 shrink-0" />}
+                    <span>{llmTestResult.msg}</span>
+                  </div>
+                )}
               </div>
             </div>
           )}
@@ -1078,19 +1209,23 @@ export const SettingsView: React.FC = () => {
           {/* 5. External Calendar Subscriptions & Export */}
           {activeSection === 'calendar' && (
             <div className="space-y-5 animate-fadeIn">
-              <div className="flex items-center gap-3 pb-4 border-b border-gray-100 dark:border-neutral-800">
-                <div className="w-10 h-10 rounded-xl bg-purple-50 dark:bg-purple-950/60 text-purple-600 dark:text-purple-400 flex items-center justify-center shrink-0">
+              {renderCardHeader(
+                <div className="w-10 h-10 rounded-xl bg-purple-50 dark:bg-purple-950/60 text-purple-600 dark:text-purple-400 flex items-center justify-center">
                   <Calendar className="w-5 h-5" />
-                </div>
-                <div>
-                  <h2 className="text-base font-bold text-gray-900 dark:text-gray-100">
-                    外部日历与订阅同步
-                  </h2>
-                  <p className="text-xs text-gray-500 dark:text-neutral-400 mt-0.5">
-                    导入外部日历自动避开日程冲突 · 导出专属 TODO 订阅链接至手机日历
-                  </p>
-                </div>
-              </div>
+                </div>,
+                '外部日历与订阅同步',
+                '导入外部日历自动避开日程冲突 · 导出专属 TODO 订阅链接至手机日历',
+                isCalendarDone ? (
+                  <span className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-xs font-semibold bg-emerald-100 dark:bg-emerald-950/70 text-emerald-700 dark:text-emerald-300">
+                    <span className="w-1.5 h-1.5 rounded-full bg-emerald-500" />
+                    已配置 ({subs.length}个源)
+                  </span>
+                ) : (
+                  <span className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-xs font-semibold bg-amber-100 dark:bg-amber-950/70 text-amber-700 dark:text-amber-300">
+                    未添加日历源
+                  </span>
+                )
+              )}
 
               {/* Export TODO link */}
               <div className="p-4 bg-gray-50 dark:bg-[#28292a] rounded-2xl border border-gray-200/80 dark:border-neutral-700/80 space-y-2 text-xs">
