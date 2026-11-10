@@ -7,6 +7,7 @@ export interface User {
   role: 'user' | 'admin';
   status: 'pending' | 'approved' | 'rejected';
   token_secret: string;
+  calendar_token?: string;
 }
 
 interface AuthContextType {

@@ -51,8 +51,8 @@ const DashboardContent: React.FC = () => {
         pendingUsersCount={pendingCount}
       />
 
-      {/* Main Container with spacious width and responsive padding for mobile bottom bar */}
-      <main className="flex-1 w-full max-w-[1600px] mx-auto px-3 sm:px-6 lg:px-8 py-4 sm:py-6 pb-20 sm:pb-6">
+      {/* Main Container with spacious width and responsive padding */}
+      <main className="flex-1 w-full max-w-[1600px] mx-auto px-3 sm:px-6 lg:px-8 py-3 sm:py-5 pb-20 sm:pb-6">
         {activeTab === 'todos' && <TodoList />}
         {activeTab === 'calendar' && <CalendarView />}
         {activeTab === 'settings' && <SettingsView />}
@@ -60,10 +60,6 @@ const DashboardContent: React.FC = () => {
           <AdminUsersView onRefreshCount={fetchPendingCount} />
         )}
       </main>
-
-      <footer className="hidden sm:block bg-white dark:bg-[#1e1f20] border-t border-gray-200/80 dark:border-neutral-800/80 py-4 text-center text-xs text-gray-400 dark:text-neutral-500 transition-colors">
-        Clawbot Tasks · 微信智能时间规划助手 (服务端口 5178)
-      </footer>
     </div>
   );
 };
