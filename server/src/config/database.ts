@@ -49,6 +49,7 @@ export function initDatabase() {
       weixin_base_url TEXT DEFAULT 'https://ilinkai.weixin.qq.com',
       weixin_sync_buf TEXT DEFAULT '',
       weixin_nickname TEXT DEFAULT '',
+      weixin_context_token TEXT DEFAULT '',
       updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
     );
 
@@ -117,6 +118,7 @@ export function initDatabase() {
   addCol('weixin_base_url', 'TEXT', "'https://ilinkai.weixin.qq.com'");
   addCol('weixin_sync_buf', 'TEXT', "''");
   addCol('weixin_nickname', 'TEXT', "''");
+  addCol('weixin_context_token', 'TEXT', "''");
 
   // Seed initial admin if database has no users
   const defaultAdminPassword = process.env.ADMIN_DEFAULT_PASSWORD || '86698111';

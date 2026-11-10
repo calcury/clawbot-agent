@@ -11,6 +11,7 @@ import {
   Moon,
   Monitor,
   Check,
+  Terminal,
 } from 'lucide-react';
 
 interface NavbarProps {
@@ -44,6 +45,7 @@ export const Navbar: React.FC<NavbarProps> = ({ activeTab, setActiveTab, pending
 
   if (user?.role === 'admin') {
     navItems.push({ id: 'admin', label: '用户审核', icon: Users });
+    navItems.push({ id: 'debug', label: '系统调试', icon: Terminal });
   }
 
   const themeOptions: { mode: ThemeMode; label: string; icon: typeof Sun }[] = [

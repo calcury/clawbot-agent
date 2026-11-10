@@ -1,6 +1,19 @@
 import { Router } from 'express';
 import { register, login, getMe } from '../controllers/authController.js';
-import { listUsers, approveUser, rejectUser, setUserRole, deleteUser } from '../controllers/adminController.js';
+import {
+  listUsers,
+  approveUser,
+  rejectUser,
+  setUserRole,
+  deleteUser,
+  getDebugLogs,
+  clearDebugLogs,
+  debugSimulateInbound,
+  debugTestSendWeChat,
+  getWorkersStatus,
+  restartUserWorker,
+  resetUserSyncBuf,
+} from '../controllers/adminController.js';
 import { getSettings, updateSettings, regenerateWebhookToken } from '../controllers/settingsController.js';
 import { listTasks, createTask, updateTask, deleteTask, rescheduleTask, quickActionTask } from '../controllers/taskController.js';
 import {
@@ -58,3 +71,12 @@ router.put('/admin/users/:id/approve', requireAdmin, approveUser);
 router.put('/admin/users/:id/reject', requireAdmin, rejectUser);
 router.put('/admin/users/:id/role', requireAdmin, setUserRole);
 router.delete('/admin/users/:id', requireAdmin, deleteUser);
+
+// Admin Debugger Routes
+router.get('/admin/debug/logs', requireAdmin, getDebugLogs);
+router.delete('/admin/debug/logs', requireAdmin, clearDebugLogs);
+router.post('/admin/debug/simulate-inbound', requireAdmin, debugSimulateInbound);
+router.post('/admin/debug/test-send-wechat', requireAdmin, debugTestSendWeChat);
+router.get('/admin/debug/workers', requireAdmin, getWorkersStatus);
+router.post('/admin/debug/workers/:userId/restart', requireAdmin, restartUserWorker);
+router.post('/admin/debug/workers/:userId/reset-sync', requireAdmin, resetUserSyncBuf);

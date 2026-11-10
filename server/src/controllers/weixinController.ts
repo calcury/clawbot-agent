@@ -86,17 +86,18 @@ export async function sendTestMessage(req: AuthenticatedRequest, res: Response):
     return;
   }
 
-  const success = await sendWeixinTextMessage(
+  const result = await sendWeixinTextMessage(
     settings.weixin_base_url || 'https://ilinkai.weixin.qq.com',
     settings.weixin_bot_token,
     settings.weixin_bot_id || '',
     settings.weixin_user_id,
-    '🎉 恭喜！您的微信已成功与 Clawbot 智能时间规划助手完成配对连接。\n您现在可以直接在此向我发送日常时间安排或任务需求了～'
+    '🎉 恭喜！您的微信已成功与 Clawbot 智能时间规划助手完成配对连接。\n您现在可以直接在此向我发送日常时间安排或任务需求了～',
+    settings.weixin_context_token
   );
 
-  if (success) {
+  if (result.success) {
     res.json({ message: '测试消息已成功推送至您的微信！请在手机端查收。' });
   } else {
-    res.status(500).json({ error: '消息推送失败，请稍后重试或重新扫码绑定' });
+    res.status(500).json({ error: '消息推送失败：' + (result.error || '请稍后重试或重新扫码绑定') });
   }
 }

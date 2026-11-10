@@ -7,6 +7,10 @@ import { initDatabase } from './config/database.js';
 import { router as apiRouter } from './routes/api.js';
 import { startReminderScheduler } from './services/reminder.js';
 import { weixinTransitManager } from './services/weixinGateway.js';
+import { installConsoleInterceptor } from './services/debugLogger.js';
+
+// Intercept logs for Admin Debugger
+installConsoleInterceptor();
 
 const app = express();
 

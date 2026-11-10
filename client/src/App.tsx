@@ -7,6 +7,7 @@ import { CalendarView } from './components/CalendarView';
 import { TodoList } from './components/TodoList';
 import { SettingsView } from './components/SettingsView';
 import { AdminUsersView } from './components/AdminUsersView';
+import { SystemDebugger } from './components/SystemDebugger';
 import { api } from './api/client';
 
 const DashboardContent: React.FC = () => {
@@ -59,6 +60,7 @@ const DashboardContent: React.FC = () => {
         {activeTab === 'admin' && user.role === 'admin' && (
           <AdminUsersView onRefreshCount={fetchPendingCount} />
         )}
+        {activeTab === 'debug' && user.role === 'admin' && <SystemDebugger />}
       </main>
     </div>
   );

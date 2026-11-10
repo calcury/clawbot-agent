@@ -35,6 +35,7 @@ export interface UserSettings {
   weixin_base_url?: string;
   weixin_sync_buf?: string;
   weixin_nickname?: string;
+  weixin_context_token?: string;
   updated_at: string;
 }
 

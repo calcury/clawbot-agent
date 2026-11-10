@@ -157,14 +157,15 @@ export async function sendClawbotMessage(settings: UserSettings, message: string
   // 1. If paired via OpenClaw / Tencent Weixin iLink, send directly to user
   if (settings.weixin_connected && settings.weixin_bot_token && settings.weixin_user_id) {
     const baseUrl = settings.weixin_base_url || 'https://ilinkai.weixin.qq.com';
-    const sent = await sendWeixinTextMessage(
+    const res = await sendWeixinTextMessage(
       baseUrl,
       settings.weixin_bot_token,
       settings.weixin_bot_id || '',
       settings.weixin_user_id,
-      message
+      message,
+      settings.weixin_context_token
     );
-    if (sent) return true;
+    if (res.success) return true;
   }
 
   // 2. Fallback to custom Clawbot outbound webhook URL if configured

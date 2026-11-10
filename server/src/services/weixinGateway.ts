@@ -5,10 +5,11 @@ import { UserSettings, Task, ConversationState } from '../models/types.js';
 import { parseUserMessageWithLLM } from './llm.js';
 import { scheduleTask } from './scheduler.js';
 import { templates } from './clawbot.js';
+import { addDebugLog } from './debugLogger.js';
 
 const FIXED_BASE_URL = 'https://ilinkai.weixin.qq.com';
 const ILINK_APP_ID = 'bot';
-const ILINK_CLIENT_VERSION = '132106'; // 2.4.10 encoded
+const ILINK_CLIENT_VERSION = '132106'; // 2.4.10 encoded: ((2&0xff)<<16)|((4&0xff)<<8)|(10&0xff)
 const BOT_TYPE = '3';
 
 function randomWechatUin(): string {
@@ -39,10 +40,17 @@ interface ActiveQRSession {
 const activeQRSessions = new Map<number, ActiveQRSession>();
 
 /**
+ * In-memory context token store: userId -> contextToken
+ */
+const contextTokenMap = new Map<number, string>();
+
+/**
  * 1. Request new QR Code for pairing
  */
 export async function requestLoginQRCode(userId: number): Promise<{ qrcode: string; qrcodeUrl: string }> {
   const url = `${FIXED_BASE_URL}/ilink/bot/get_bot_qrcode?bot_type=${BOT_TYPE}`;
+  addDebugLog('Weixin', 'info', `用户 #${userId} 请求微信登录配对二维码`, { url });
+
   const resp = await axios.post(
     url,
     { local_token_list: [] },
@@ -51,6 +59,7 @@ export async function requestLoginQRCode(userId: number): Promise<{ qrcode: stri
 
   const data = resp.data;
   if (!data.qrcode) {
+    addDebugLog('Weixin', 'error', `获取微信二维码失败`, data);
     throw new Error('微信接口返回二维码失败: ' + JSON.stringify(data));
   }
 
@@ -61,6 +70,7 @@ export async function requestLoginQRCode(userId: number): Promise<{ qrcode: stri
   };
 
   activeQRSessions.set(userId, session);
+  addDebugLog('Weixin', 'success', `成功生成配对二维码: ${session.qrcode.slice(0, 16)}...`);
   return { qrcode: session.qrcode, qrcodeUrl: session.qrcodeUrl };
 }
 
@@ -116,6 +126,8 @@ export async function checkLoginQRStatus(userId: number): Promise<{
 
       activeQRSessions.delete(userId);
 
+      addDebugLog('Weixin', 'success', `用户 #${userId} 扫码配对成功！已连接微信账号 ${wxUserId}`);
+
       // Start isolated message transit worker for this user
       weixinTransitManager.startWorker(userId);
 
@@ -127,54 +139,76 @@ export async function checkLoginQRStatus(userId: number): Promise<{
     if (err.code === 'ECONNABORTED' || err.message?.includes('timeout')) {
       return { status: 'wait' };
     }
-    console.warn(`[Weixin QR Poll] Network error:`, err.message);
+    addDebugLog('Weixin', 'warn', `[Weixin QR Poll] 轮询网络异常: ${err.message}`);
     return { status: 'wait' };
   }
 }
 
 /**
  * 3. Send text message to user on WeChat via iLink API
+ * Matching official OpenClaw Weixin channel wire format
  */
 export async function sendWeixinTextMessage(
   baseUrl: string,
   botToken: string,
   fromBotId: string,
   toUserId: string,
-  text: string
-): Promise<boolean> {
-  if (!botToken || !toUserId) return false;
+  text: string,
+  contextToken?: string
+): Promise<{ success: boolean; data?: any; error?: string; message_id?: string; ret?: number }> {
+  if (!botToken || !toUserId) {
+    return { success: false, error: '缺少 botToken 或 toUserId' };
+  }
 
+  const clientId = `openclaw-weixin-${Date.now()}-${Math.floor(Math.random() * 100000)}`;
   const url = `${baseUrl.replace(/\/$/, '')}/ilink/bot/sendmessage`;
+
+  const payload = {
+    msg: {
+      from_user_id: fromBotId || '',
+      to_user_id: toUserId,
+      client_id: clientId,
+      message_type: 2, // MessageType.BOT = 2
+      message_state: 2, // MessageState.FINISH = 2
+      context_token: contextToken || undefined,
+      item_list: [
+        {
+          type: 1, // MessageItemType.TEXT = 1
+          text_item: { text },
+        },
+      ],
+    },
+    base_info: {
+      channel_version: '2.4.10',
+      bot_agent: 'OpenClaw',
+    },
+  };
+
   try {
-    await axios.post(
-      url,
-      {
-        msg: {
-          from_user_id: fromBotId || 'bot',
-          to_user_id: toUserId,
-          client_msg_id: `claw-${Date.now()}-${Math.floor(Math.random() * 10000)}`,
-          msg_type: 1, // Text message
-          item_list: [
-            {
-              type: 1,
-              text_item: { text },
-            },
-          ],
-        },
-        base_info: {
-          channel_version: '2.4.10',
-          bot_agent: 'OpenClaw',
-        },
-      },
-      {
-        headers: buildHeaders(botToken),
-        timeout: 15000,
-      }
-    );
-    return true;
+    addDebugLog('Weixin', 'info', `🚀 下发消息至微信用户: ${toUserId.slice(0, 16)}...`, {
+      clientId,
+      hasContextToken: Boolean(contextToken),
+      preview: text.length > 80 ? text.slice(0, 80) + '...' : text,
+    });
+
+    const resp = await axios.post(url, payload, {
+      headers: buildHeaders(botToken),
+      timeout: 15000,
+    });
+
+    const data = resp.data;
+    if (data && data.ret === 0) {
+      addDebugLog('Weixin', 'success', `✅ 微信消息发送成功 (ID: ${data.message_id || 'ok'})`);
+      return { success: true, data, message_id: data.message_id, ret: 0 };
+    } else {
+      const errMsg = data?.errmsg || `ret=${data?.ret || 'unknown'}`;
+      addDebugLog('Weixin', 'error', `❌ 微信消息发送拒绝: ${errMsg}`, data);
+      return { success: false, data, error: errMsg, ret: data?.ret };
+    }
   } catch (err: any) {
-    console.error(`[Weixin Send Error]:`, err.response?.data || err.message);
-    return false;
+    const errDetail = err.response?.data || err.message;
+    addDebugLog('Weixin', 'error', `❌ 微信网络下发异常: ${err.message}`, errDetail);
+    return { success: false, error: String(errDetail) };
   }
 }
 
@@ -185,9 +219,16 @@ export async function processWeChatMessage(
   userId: number,
   content: string,
   fromUserId: string
-): Promise<string> {
+): Promise<{
+  replyText: string;
+  diagnostics?: Record<string, any>;
+}> {
   const settings = db.prepare('SELECT * FROM user_settings WHERE user_id = ?').get(userId) as UserSettings;
-  if (!settings) return '用户未初始化配置';
+  if (!settings) {
+    return { replyText: '⚠️ 用户未初始化配置' };
+  }
+
+  addDebugLog('Weixin', 'info', `📩 接收到微信用户 #${userId} 文本: "${content}"`);
 
   // Check multi-turn conversation state
   const existingConv = db.prepare('SELECT * FROM conversation_states WHERE user_id = ?').get(userId) as ConversationState | undefined;
@@ -201,8 +242,20 @@ export async function processWeChatMessage(
   }
 
   try {
-    const parsed = await parseUserMessageWithLLM(content, settings, pendingTask);
-    console.log(`[Weixin Transit] User #${userId} LLM parsed result:`, parsed);
+    let parsed: any;
+    // Check if user has configured LLM API Key
+    if (!settings.llm_api_key || !settings.llm_api_key.trim()) {
+      addDebugLog('LLM', 'warn', `用户 #${userId} 未配置 DeepSeek API Key，无法进行语义解析`);
+      return {
+        replyText:
+          `⚠️【系统提醒】您尚未在管理后台配置大模型 API Key。\n` +
+          `请登录管理面板（http://${settings.weixin_base_url ? '管理地址' : '5178'}）在「设置」中填入您的 DeepSeek API Key 即可开启智能规划。`,
+        diagnostics: { error: '未配置 LLM API Key' },
+      };
+    }
+
+    parsed = await parseUserMessageWithLLM(content, settings, pendingTask);
+    addDebugLog('LLM', 'success', `用户 #${userId} 语义解析成功`, parsed);
 
     if (parsed.intent === 'status_update') {
       db.prepare('DELETE FROM conversation_states WHERE user_id = ?').run(userId);
@@ -216,12 +269,15 @@ export async function processWeChatMessage(
       `).get(userId) as Task | undefined;
 
       if (!activeTask) {
-        return '💡 当前没有正在进行或排程中的待办任务，无需更新状态。';
+        const reply = '💡 当前没有正在进行或排程中的待办任务，无需更新状态。';
+        return { replyText: reply, diagnostics: { intent: parsed.intent, parsed } };
       }
 
       if (action === 'complete') {
         db.prepare('UPDATE tasks SET status = "completed", updated_at = CURRENT_TIMESTAMP WHERE id = ?').run(activeTask.id);
-        return templates.taskCompleted(activeTask.title);
+        const reply = templates.taskCompleted(activeTask.title);
+        addDebugLog('Scheduler', 'success', `待办 #${activeTask.id} (${activeTask.title}) 标记为已完成`);
+        return { replyText: reply, diagnostics: { intent: parsed.intent, parsed, action: 'completed' } };
       } else if (action === 'extend') {
         const extMin = parsed.extend_minutes || 30;
         const currentEnd = new Date(activeTask.scheduled_end || new Date());
@@ -234,7 +290,9 @@ export async function processWeChatMessage(
           WHERE id = ?
         `).run(newEnd.toISOString(), extMin, activeTask.id);
 
-        return templates.taskExtended(activeTask.title, extMin, newEndStr);
+        const reply = templates.taskExtended(activeTask.title, extMin, newEndStr);
+        addDebugLog('Scheduler', 'info', `待办 #${activeTask.id} (${activeTask.title}) 延长 ${extMin}m 至 ${newEndStr}`);
+        return { replyText: reply, diagnostics: { intent: parsed.intent, parsed, action: 'extend', extMin } };
       } else if (action === 'reschedule') {
         const plan = scheduleTask(userId, {
           id: activeTask.id,
@@ -254,12 +312,15 @@ export async function processWeChatMessage(
 
           const sStr = new Date(plan.scheduled_start).toLocaleString('zh-CN', { month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit', hour12: false });
           const eStr = new Date(plan.scheduled_end).toLocaleTimeString('zh-CN', { hour: '2-digit', minute: '2-digit', hour12: false });
-          return templates.taskRescheduled(activeTask.title, sStr, eStr);
+          const reply = templates.taskRescheduled(activeTask.title, sStr, eStr);
+          addDebugLog('Scheduler', 'success', `待办 #${activeTask.id} (${activeTask.title}) 重新排程成功: ${sStr} ~ ${eStr}`);
+          return { replyText: reply, diagnostics: { intent: parsed.intent, parsed, plan } };
         } else {
-          return `⚠️ 重新安排失败：${plan.message}`;
+          const reply = `⚠️ 重新安排失败：${plan.message}`;
+          return { replyText: reply, diagnostics: { intent: parsed.intent, parsed, plan } };
         }
       } else {
-        return '已了解您的状态更新。';
+        return { replyText: '已了解您的状态更新。', diagnostics: { intent: parsed.intent, parsed } };
       }
     } else if (parsed.intent === 'query_schedule') {
       const todayStart = new Date();
@@ -274,7 +335,9 @@ export async function processWeChatMessage(
       `).all(userId, todayStart.toISOString(), todayEnd.toISOString()) as Task[];
 
       const todayStr = new Date().toLocaleDateString('zh-CN', { month: 'long', day: 'numeric', weekday: 'long' });
-      return templates.scheduleQueryList(todayTasks, todayStr);
+      const reply = templates.scheduleQueryList(todayTasks, todayStr);
+      addDebugLog('Scheduler', 'info', `查询今日日程，共找到 ${todayTasks.length} 项`);
+      return { replyText: reply, diagnostics: { intent: parsed.intent, todayTasksCount: todayTasks.length } };
     } else if (parsed.intent === 'create_task') {
       const title = parsed.title || pendingTask?.title || '未命名任务';
       const duration = parsed.duration_minutes || pendingTask?.duration_minutes || null;
@@ -302,7 +365,9 @@ export async function processWeChatMessage(
             updated_at = CURRENT_TIMESTAMP
         `).run(userId, JSON.stringify(merged), JSON.stringify(missing));
 
-        return templates.askMissingFields(title, missing);
+        const reply = templates.askMissingFields(title, missing);
+        addDebugLog('LLM', 'info', `任务要素缺失，向用户追问: ${title}`, missing);
+        return { replyText: reply, diagnostics: { intent: parsed.intent, merged, missing } };
       } else {
         db.prepare('DELETE FROM conversation_states WHERE user_id = ?').run(userId);
 
@@ -326,7 +391,9 @@ export async function processWeChatMessage(
           const sStr = new Date(plan.scheduled_start).toLocaleString('zh-CN', { month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit', hour12: false });
           const eStr = new Date(plan.scheduled_end).toLocaleTimeString('zh-CN', { hour: '2-digit', minute: '2-digit', hour12: false });
 
-          return templates.scheduleSuccess(title, sStr, eStr, duration!, urgency!, importance!);
+          const reply = templates.scheduleSuccess(title, sStr, eStr, duration!, urgency!, importance!);
+          addDebugLog('Scheduler', 'success', `新待办规划排程成功: "${title}" (${sStr} ~ ${eStr})`);
+          return { replyText: reply, diagnostics: { intent: parsed.intent, plan, task: merged } };
         } else {
           db.prepare(`
             INSERT INTO tasks (
@@ -336,22 +403,27 @@ export async function processWeChatMessage(
             VALUES (?, ?, ?, ?, ?, ?, 'pending_slot')
           `).run(userId, title, duration, urgency, importance, deadline);
 
-          return templates.scheduleFailed(title, duration!, plan.message);
+          const reply = templates.scheduleFailed(title, duration!, plan.message);
+          addDebugLog('Scheduler', 'warn', `新待办规划未找到合适时隙，置为待安排: "${title}" (${plan.message})`);
+          return { replyText: reply, diagnostics: { intent: parsed.intent, plan, task: merged } };
         }
       }
     } else {
-      return (
+      const reply =
         `🤖【Clawbot 时间管理助手】\n` +
         `我是您的个人日程规划管家。您可以直接对我说：\n` +
         `• "安排明天下午写代码，耗时90分钟，加急5分，周三前交"\n` +
         `• "今天有哪些待办？"\n` +
         `• "刚刚的任务搞定了"\n` +
-        `• "时间不够，延长30分钟"`
-      );
+        `• "时间不够，延长30分钟"`;
+      return { replyText: reply, diagnostics: { intent: 'help' } };
     }
   } catch (err: any) {
-    console.error('[Weixin Process Error]:', err);
-    return `⚠️ 助手处理出错：${err.message}\n请检查管理面板中的 DeepSeek API Key 是否配置有效。`;
+    addDebugLog('Weixin', 'error', `处理微信指令异常: ${err.message}`, err.stack);
+    return {
+      replyText: `⚠️ 助手处理出错：${err.message}\n请检查管理后台设置中 DeepSeek API Key 是否配置有效。`,
+      diagnostics: { error: err.message },
+    };
   }
 }
 
@@ -360,7 +432,16 @@ export async function processWeChatMessage(
  * Multi-tenant: Each user has their own independent long-poll worker!
  */
 class WeixinTransitManager {
-  private activeWorkers = new Map<number, { abortController: AbortController; running: boolean }>();
+  private activeWorkers = new Map<
+    number,
+    {
+      abortController: AbortController;
+      running: boolean;
+      startedAt: number;
+      lastPollAt: number;
+      lastError?: string;
+    }
+  >();
 
   public startWorker(userId: number) {
     this.stopWorker(userId);
@@ -371,9 +452,19 @@ class WeixinTransitManager {
     }
 
     const abortController = new AbortController();
-    this.activeWorkers.set(userId, { abortController, running: true });
+    const now = Date.now();
+    this.activeWorkers.set(userId, {
+      abortController,
+      running: true,
+      startedAt: now,
+      lastPollAt: now,
+    });
 
-    console.log(`🚀 [Weixin Transit] Started isolated worker for User #${userId} (WxUser: ${settings.weixin_user_id})`);
+    addDebugLog(
+      'Weixin',
+      'info',
+      `🚀 启动用户 #${userId} 的微信独立轮询管道 (WxUser: ${settings.weixin_user_id || 'unnamed'})`
+    );
     this.runLongPollLoop(userId, abortController.signal);
   }
 
@@ -383,7 +474,7 @@ class WeixinTransitManager {
       worker.running = false;
       worker.abortController.abort();
       this.activeWorkers.delete(userId);
-      console.log(`🛑 [Weixin Transit] Stopped worker for User #${userId}`);
+      addDebugLog('Weixin', 'info', `🛑 已停止用户 #${userId} 的微信轮询管道`);
     }
   }
 
@@ -393,10 +484,46 @@ class WeixinTransitManager {
       WHERE weixin_connected = 1 AND weixin_bot_token != ''
     `).all() as { user_id: number }[];
 
-    console.log(`🌟 [Weixin Transit] Bootstrapping workers for ${connectedUsers.length} connected user(s)...`);
+    addDebugLog('Weixin', 'info', `🌟 初始化多租户微信轮询: 共 ${connectedUsers.length} 位已连接用户`);
     for (const u of connectedUsers) {
       this.startWorker(u.user_id);
     }
+  }
+
+  public getWorkerStatusList() {
+    const allSettings = db.prepare(`
+      SELECT us.*, u.username, u.role
+      FROM user_settings us
+      JOIN users u ON us.user_id = u.id
+      ORDER BY us.user_id ASC
+    `).all() as (UserSettings & { username: string; role: string })[];
+
+    return allSettings.map((s) => {
+      const worker = this.activeWorkers.get(s.user_id);
+      return {
+        userId: s.user_id,
+        username: s.username,
+        role: s.role,
+        weixinConnected: Boolean(s.weixin_connected),
+        weixinBotId: s.weixin_bot_id || '',
+        weixinUserId: s.weixin_user_id || '',
+        weixinBaseUrl: s.weixin_base_url || FIXED_BASE_URL,
+        hasBotToken: Boolean(s.weixin_bot_token && s.weixin_bot_token.length > 5),
+        hasSyncBuf: Boolean(s.weixin_sync_buf),
+        hasContextToken: Boolean(s.weixin_context_token || contextTokenMap.has(s.user_id)),
+        hasLlmKey: Boolean(s.llm_api_key && s.llm_api_key.length > 3),
+        workerRunning: Boolean(worker?.running),
+        startedAt: worker?.startedAt ? new Date(worker.startedAt).toISOString() : null,
+        lastPollAt: worker?.lastPollAt ? new Date(worker.lastPollAt).toISOString() : null,
+        lastError: worker?.lastError,
+      };
+    });
+  }
+
+  public resetSyncBuf(userId: number) {
+    db.prepare('UPDATE user_settings SET weixin_sync_buf = "" WHERE user_id = ?').run(userId);
+    addDebugLog('Weixin', 'info', `用户 #${userId} 的 weixin_sync_buf 已重置为初始状态`);
+    this.startWorker(userId);
   }
 
   private async runLongPollLoop(userId: number, signal: AbortSignal) {
@@ -405,6 +532,11 @@ class WeixinTransitManager {
       if (!settings || !settings.weixin_connected || !settings.weixin_bot_token) {
         this.stopWorker(userId);
         break;
+      }
+
+      const worker = this.activeWorkers.get(userId);
+      if (worker) {
+        worker.lastPollAt = Date.now();
       }
 
       const baseUrl = settings.weixin_base_url || FIXED_BASE_URL;
@@ -432,42 +564,69 @@ class WeixinTransitManager {
 
         const data = resp.data;
         if (data && data.ret === 0) {
+          if (worker) worker.lastError = undefined;
+
           if (data.get_updates_buf && data.get_updates_buf !== syncBuf) {
             db.prepare('UPDATE user_settings SET weixin_sync_buf = ? WHERE user_id = ?').run(data.get_updates_buf, userId);
           }
 
           const msgs = data.msgs || [];
+          if (msgs.length > 0) {
+            addDebugLog('Weixin', 'info', `[用户 #${userId}] 收到 ${msgs.length} 条微信消息更新`);
+          }
+
           for (const msg of msgs) {
             const fromUserId = msg.from_user_id;
             // Ignore messages sent by the bot itself
             if (fromUserId === botId) continue;
 
+            // Cache context_token if present
+            if (msg.context_token) {
+              contextTokenMap.set(userId, msg.context_token);
+              db.prepare('UPDATE user_settings SET weixin_context_token = ? WHERE user_id = ?').run(msg.context_token, userId);
+              addDebugLog('Weixin', 'info', `[用户 #${userId}] 更新会话 context_token 成功`);
+            }
+
             const itemList = msg.item_list || [];
             for (const item of itemList) {
               if (item.type === 1 && item.text_item?.text) {
                 const userText = item.text_item.text.trim();
-                console.log(`📩 [Weixin Inbound User #${userId}] From: ${fromUserId}, Text: "${userText}"`);
+                addDebugLog('Weixin', 'info', `📩 微信来信 (用户 #${userId}): "${userText}"`);
 
                 // Process through scheduling pipeline
-                const replyText = await processWeChatMessage(userId, userText, fromUserId);
+                const { replyText } = await processWeChatMessage(userId, userText, fromUserId);
+
+                // Use the context token from msg or memory
+                const activeContextToken = msg.context_token || contextTokenMap.get(userId) || settings.weixin_context_token;
 
                 // Send reply back to user
-                await sendWeixinTextMessage(baseUrl, botToken, botId, fromUserId, replyText);
-                console.log(`📤 [Weixin Outbound User #${userId}] Replied to ${fromUserId}`);
+                await sendWeixinTextMessage(
+                  baseUrl,
+                  botToken,
+                  botId,
+                  fromUserId,
+                  replyText,
+                  activeContextToken
+                );
               }
             }
           }
+        } else if (data && data.ret !== 0) {
+          if (worker) worker.lastError = `ret=${data.ret} errmsg=${data.errmsg || 'unknown'}`;
+          addDebugLog('Weixin', 'warn', `[用户 #${userId}] getupdates 返回错误码: ${data.ret} (${data.errmsg || ''})`);
+          await new Promise((r) => setTimeout(r, 4000));
         }
       } catch (err: any) {
         if (signal.aborted) break;
 
-        // Long-poll timeout is expected
+        // Long-poll timeout is expected and normal
         if (err.code === 'ECONNABORTED' || err.message?.includes('timeout')) {
           continue;
         }
 
-        console.warn(`[Weixin Transit User #${userId}] Poll loop error:`, err.message);
-        // Exponential/gentle backoff before retrying
+        if (worker) worker.lastError = err.message;
+        addDebugLog('Weixin', 'warn', `[用户 #${userId}] 微信轮询连接异常: ${err.message}`);
+        // Gentle backoff before retrying
         await new Promise((r) => setTimeout(r, 3000));
       }
     }
