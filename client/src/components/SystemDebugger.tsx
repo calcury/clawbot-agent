@@ -237,8 +237,10 @@ export const SystemDebugger: React.FC = () => {
   });
 
   const sampleMessages = [
+    '查看日历',
+    '查看任务',
+    '重新排程',
     '帮我安排明天下午2点写代码90分钟，加急4分，周五前完成',
-    '今天有哪些待办日程？',
     '刚才的任务做完了',
     '时间不够了，再延长30分钟',
     '排个任务：准备下周开会PPT，耗时2小时',
@@ -602,6 +604,24 @@ export const SystemDebugger: React.FC = () => {
                     {simResult.replyText}
                   </div>
                 </div>
+
+                {/* 1.5 Image Card Preview if generated */}
+                {simResult.imagePreviewBase64 && (
+                  <div className="space-y-1.5">
+                    <span className="font-bold text-gray-700 dark:text-neutral-300 text-[11px] flex items-center gap-1.5">
+                      <Sparkles className="w-3.5 h-3.5 text-blue-500" />
+                      <span>微信图片卡片下发预览：</span>
+                    </span>
+                    <div className="p-3 bg-gray-50 dark:bg-[#28292a] rounded-xl border border-gray-200 dark:border-neutral-700 flex flex-col items-center">
+                      <img
+                        src={simResult.imagePreviewBase64}
+                        alt="WeChat Image Card"
+                        className="w-full max-w-[480px] rounded-xl shadow-md border border-gray-200 dark:border-neutral-700"
+                      />
+                      <span className="text-[10px] text-gray-400 mt-2">已成功生成高清卡片并同步上传至腾讯 CDN 下发</span>
+                    </div>
+                  </div>
+                )}
 
                 {/* 2. LLM Parsed intent */}
                 {simResult.diagnostics?.parsed && (

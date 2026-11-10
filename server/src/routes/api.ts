@@ -23,6 +23,9 @@ import {
   syncSubscriptionNow,
   getCalendarEvents,
   exportDedicatedIcal,
+  syncAndReplanAll,
+  previewCalendarCard,
+  previewTodoCard,
 } from '../controllers/calendarController.js';
 import { handleClawbotWebhook } from '../controllers/webhookController.js';
 import { getQRCode, getStatus, unbindWeixin, sendTestMessage } from '../controllers/weixinController.js';
@@ -64,6 +67,9 @@ router.post('/calendar/subscriptions', requireAuth, createSubscription);
 router.delete('/calendar/subscriptions/:id', requireAuth, deleteSubscription);
 router.post('/calendar/subscriptions/:id/sync', requireAuth, syncSubscriptionNow);
 router.get('/calendar/events', requireAuth, getCalendarEvents);
+router.post('/calendar/sync-and-replan', requireAuth, syncAndReplanAll);
+router.get('/calendar/preview-card', requireAuth, previewCalendarCard);
+router.get('/calendar/preview-todo-card', requireAuth, previewTodoCard);
 
 // ================= Admin Routes =================
 router.get('/admin/users', requireAdmin, listUsers);

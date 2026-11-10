@@ -101,6 +101,27 @@ export async function syncSubscription(sub: CalendarSubscription): Promise<{ cou
 }
 
 /**
+ * Synchronize all subscriptions belonging to a user
+ */
+export async function syncAllUserSubscriptions(userId: number): Promise<{ totalEvents: number; subscriptionsSynced: number }> {
+  const subs = db.prepare('SELECT * FROM calendar_subscriptions WHERE user_id = ?').all(userId) as CalendarSubscription[];
+  let totalEvents = 0;
+  let subscriptionsSynced = 0;
+
+  for (const sub of subs) {
+    try {
+      const res = await syncSubscription(sub);
+      totalEvents += res.count;
+      subscriptionsSynced++;
+    } catch (err: any) {
+      console.warn(`[Calendar] Failed to sync subscription #${sub.id} (${sub.name}):`, err.message);
+    }
+  }
+
+  return { totalEvents, subscriptionsSynced };
+}
+
+/**
  * Generate iCalendar format string for dedicated TODO export
  */
 export function generateUserTodoIcal(userId: number, username: string): string {

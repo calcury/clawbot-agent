@@ -160,6 +160,9 @@ export async function debugSimulateInbound(req: AuthenticatedRequest, res: Respo
       inputContent: content,
       replyText: result.replyText,
       diagnostics: result.diagnostics,
+      imagePreviewBase64: result.imageBuffer
+        ? `data:image/png;base64,${result.imageBuffer.toString('base64')}`
+        : undefined,
       elapsedMs,
     });
   } catch (err: any) {

@@ -3,7 +3,9 @@ import axios from 'axios';
 import { db } from '../config/database.js';
 import { UserSettings, Task, ConversationState } from '../models/types.js';
 import { parseUserMessageWithLLM } from './llm.js';
-import { scheduleTask } from './scheduler.js';
+import { scheduleTask, replanUserTasks } from './scheduler.js';
+import { syncAllUserSubscriptions } from './calendarSync.js';
+import { renderCalendarImage, renderTodoListImage } from './cardRenderer.js';
 import { templates } from './clawbot.js';
 import { addDebugLog } from './debugLogger.js';
 
@@ -15,6 +17,10 @@ const BOT_TYPE = '3';
 function randomWechatUin(): string {
   const uint32 = crypto.randomBytes(4).readUInt32BE(0);
   return Buffer.from(String(uint32), 'utf-8').toString('base64');
+}
+
+function generateClientId(): string {
+  return `openclaw-weixin-${Date.now()}-${Math.floor(Math.random() * 100000)}`;
 }
 
 function buildHeaders(token?: string): Record<string, string> {
@@ -216,6 +222,144 @@ export async function sendWeixinTextMessage(
   }
 }
 
+function encryptAes128Ecb(plaintext: Buffer, key: Buffer): Buffer {
+  const cipher = crypto.createCipheriv('aes-128-ecb', key, null);
+  return Buffer.concat([cipher.update(plaintext), cipher.final()]);
+}
+
+/**
+ * Send image card to WeChat user via Tencent CDN
+ */
+export async function sendWeixinImageMessage(
+  baseUrl: string,
+  botToken: string,
+  botId: string,
+  toUserId: string,
+  imageBuffer: Buffer,
+  contextToken?: string
+): Promise<{ success: boolean; data?: any; error?: string; message_id?: string }> {
+  try {
+    const rawsize = imageBuffer.length;
+    const rawfilemd5 = crypto.createHash('md5').update(imageBuffer).digest('hex');
+    const aeskey = crypto.randomBytes(16);
+    const ciphertext = encryptAes128Ecb(imageBuffer, aeskey);
+    const filesize = ciphertext.length;
+    const filekey = crypto.randomBytes(16).toString('hex');
+
+    addDebugLog('Weixin', 'info', `🚀 请求微信 CDN 上传凭据 (图片大小: ${Math.round(rawsize / 1024)}KB)`);
+
+    // 1. Get CDN upload URL
+    const uploadUrlEndpoint = `${baseUrl.replace(/\/$/, '')}/ilink/bot/getuploadurl`;
+    const uploadUrlResp = await axios.post(
+      uploadUrlEndpoint,
+      {
+        filekey,
+        media_type: 1, // IMAGE
+        to_user_id: toUserId,
+        rawsize,
+        rawfilemd5,
+        filesize,
+        no_need_thumb: true,
+        aeskey: aeskey.toString('hex'),
+        base_info: {
+          channel_version: '2.4.10',
+          bot_agent: 'OpenClaw',
+        },
+      },
+      {
+        headers: buildHeaders(botToken),
+        timeout: 20000,
+      }
+    );
+
+    const uploadData = uploadUrlResp.data;
+    const uploadFullUrl = uploadData.upload_full_url?.trim();
+    const uploadParam = uploadData.upload_param;
+    const cdnBaseUrl = 'https://novac2c.cdn.weixin.qq.com/c2c';
+
+    let cdnTargetUrl: string;
+    if (uploadFullUrl) {
+      cdnTargetUrl = uploadFullUrl;
+    } else if (uploadParam) {
+      cdnTargetUrl = `${cdnBaseUrl}/upload?encrypted_query_param=${encodeURIComponent(uploadParam)}&filekey=${encodeURIComponent(filekey)}`;
+    } else {
+      throw new Error(`微信接口未返回 CDN 上传地址: ${JSON.stringify(uploadData)}`);
+    }
+
+    addDebugLog('Weixin', 'info', `📤 上传密文图片至微信 CDN...`);
+
+    // 2. Upload ciphertext to CDN
+    const cdnResp = await axios.post(cdnTargetUrl, ciphertext, {
+      headers: {
+        'Content-Type': 'application/octet-stream',
+      },
+      timeout: 30000,
+    });
+
+    const downloadParam = cdnResp.headers['x-encrypted-param'];
+    if (!downloadParam) {
+      throw new Error('微信 CDN 上传响应缺少 x-encrypted-param 响应头');
+    }
+
+    addDebugLog('Weixin', 'success', `✅ 微信 CDN 上传成功，正在下发图片卡片...`);
+
+    // 3. Send Image Message to user
+    const sendEndpoint = `${baseUrl.replace(/\/$/, '')}/ilink/bot/sendmessage`;
+    const clientId = generateClientId();
+
+    const payload = {
+      msg: {
+        from_user_id: botId || '',
+        to_user_id: toUserId,
+        client_id: clientId,
+        message_type: 2, // BOT
+        message_state: 2, // FINISH
+        context_token: contextToken || undefined,
+        item_list: [
+          {
+            type: 2, // IMAGE
+            image_item: {
+              media: {
+                encrypt_query_param: downloadParam,
+                aes_key: aeskey.toString('base64'),
+                encrypt_type: 1,
+              },
+              mid_size: filesize,
+            },
+          },
+        ],
+      },
+      base_info: {
+        channel_version: '2.4.10',
+        bot_agent: 'OpenClaw',
+      },
+    };
+
+    const sendResp = await axios.post(sendEndpoint, payload, {
+      headers: buildHeaders(botToken),
+      timeout: 15000,
+    });
+
+    const data = sendResp.data || {};
+    const isError =
+      (data.ret !== undefined && data.ret !== 0) ||
+      (data.errcode !== undefined && data.errcode !== 0);
+
+    if (!isError) {
+      addDebugLog('Weixin', 'success', `✅ 微信图片下发成功 (ID: ${data.message_id || 'ok'})`);
+      return { success: true, data, message_id: data.message_id };
+    } else {
+      const errMsg = data.errmsg || `ret=${data.ret ?? data.errcode}`;
+      addDebugLog('Weixin', 'error', `❌ 微信图片下发拒绝: ${errMsg}`, data);
+      return { success: false, data, error: errMsg };
+    }
+  } catch (err: any) {
+    const detail = err.response?.data || err.message;
+    addDebugLog('Weixin', 'error', `❌ 微信图片流程异常: ${err.message}`, detail);
+    return { success: false, error: String(detail) };
+  }
+}
+
 /**
  * 4. Process incoming user WeChat message through LLM & Scheduler
  */
@@ -225,6 +369,7 @@ export async function processWeChatMessage(
   fromUserId: string
 ): Promise<{
   replyText: string;
+  imageBuffer?: Buffer;
   diagnostics?: Record<string, any>;
 }> {
   const settings = db.prepare('SELECT * FROM user_settings WHERE user_id = ?').get(userId) as UserSettings;
@@ -233,6 +378,114 @@ export async function processWeChatMessage(
   }
 
   addDebugLog('Weixin', 'info', `📩 接收到微信用户 #${userId} 文本: "${content}"`);
+
+  const trimmed = content.trim();
+
+  // 1. Direct Trigger Command: "查看日历" / "今日日程" / "刷新日历" / "我的日历"
+  if (
+    trimmed === '查看日历' ||
+    trimmed === '日历' ||
+    trimmed === '今日日历' ||
+    trimmed === '今日日程' ||
+    trimmed === '查看日程' ||
+    trimmed === '刷新日历' ||
+    trimmed === '我的日历' ||
+    trimmed === '日程安排' ||
+    trimmed.includes('查看日历')
+  ) {
+    addDebugLog('Weixin', 'info', `[用户 #${userId}] 触发指令: 查看并刷新日历`);
+    const syncRes = await syncAllUserSubscriptions(userId);
+    const replanRes = replanUserTasks(userId);
+    let imageBuffer: Buffer | undefined;
+    try {
+      imageBuffer = await renderCalendarImage(userId);
+    } catch (e: any) {
+      addDebugLog('Weixin', 'error', `生成日历卡片图片失败: ${e.message}`);
+    }
+
+    const replyText =
+      `📅【今日智能日程与排程】\n` +
+      `已自动同步最新外部日历并完成自适应排程！\n` +
+      `• 外部日程同步：${syncRes.totalEvents} 项\n` +
+      `• 待办智能排程：${replanRes.scheduledCount} 项\n` +
+      (imageBuffer ? `日程卡片图已在下方发送 👇` : `(图片生成中...)`);
+
+    return {
+      replyText,
+      imageBuffer,
+      diagnostics: { intent: 'view_calendar', syncRes, replanRes },
+    };
+  }
+
+  // 2. Direct Trigger Command: "查看任务" / "待办清单" / "todo" / "tudo"
+  if (
+    trimmed === '查看任务' ||
+    trimmed === '任务' ||
+    trimmed === '我的待办' ||
+    trimmed === '待办清单' ||
+    trimmed === '任务清单' ||
+    trimmed.toLowerCase() === 'todo' ||
+    trimmed.toLowerCase() === 'todolist' ||
+    trimmed.toLowerCase() === 'tudo' ||
+    trimmed.includes('查看任务') ||
+    trimmed.includes('待办清单')
+  ) {
+    addDebugLog('Weixin', 'info', `[用户 #${userId}] 触发指令: 查看待办任务清单`);
+    let imageBuffer: Buffer | undefined;
+    try {
+      imageBuffer = await renderTodoListImage(userId);
+    } catch (e: any) {
+      addDebugLog('Weixin', 'error', `生成待办清单卡片图片失败: ${e.message}`);
+    }
+
+    const countRow = db.prepare('SELECT count(*) as c FROM tasks WHERE user_id = ? AND status IN ("scheduled", "in_progress", "pending")').get(userId) as any;
+    const taskCount = countRow?.c || 0;
+
+    const replyText =
+      `📝【待办任务清单 (Todo List)】\n` +
+      `您当前共有 ${taskCount} 项待办任务。\n` +
+      (imageBuffer ? `任务清单图已在下方发送 👇\n` : '') +
+      `💡 可回复“安排任务 [内容]”即刻智能规划，或“完成任务 [名称]”打勾完成。`;
+
+    return {
+      replyText,
+      imageBuffer,
+      diagnostics: { intent: 'view_todos', taskCount },
+    };
+  }
+
+  // 3. Direct Trigger Command: "重新规划" / "重新排程" / "智能重新排程"
+  if (
+    trimmed === '重新规划' ||
+    trimmed === '重新排程' ||
+    trimmed === '刷新排程' ||
+    trimmed === '更新日历' ||
+    trimmed === '智能排程' ||
+    trimmed.includes('重新排程') ||
+    trimmed.includes('重新规划')
+  ) {
+    addDebugLog('Weixin', 'info', `[用户 #${userId}] 触发指令: 强制重新排程`);
+    await syncAllUserSubscriptions(userId);
+    const replanRes = replanUserTasks(userId);
+    let imageBuffer: Buffer | undefined;
+    try {
+      imageBuffer = await renderCalendarImage(userId);
+    } catch (e: any) {
+      addDebugLog('Weixin', 'error', `生成日历卡片图片失败: ${e.message}`);
+    }
+
+    const replyText =
+      `🔄【自适应重新排程已完成】\n` +
+      `已结合最新紧急度、截止时间与外部日程重新排布！\n` +
+      `• 共规划任务：${replanRes.scheduledCount} 项${replanRes.failedCount > 0 ? `（${replanRes.failedCount} 项暂无合适时段）` : ''}\n` +
+      (imageBuffer ? `最新日程图已在下方发送 👇` : '');
+
+    return {
+      replyText,
+      imageBuffer,
+      diagnostics: { intent: 'replan', replanRes },
+    };
+  }
 
   // Check multi-turn conversation state
   const existingConv = db.prepare('SELECT * FROM conversation_states WHERE user_id = ?').get(userId) as ConversationState | undefined;
@@ -392,8 +645,15 @@ export async function processWeChatMessage(
             VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'scheduled')
           `).run(userId, title, duration, urgency, importance, deadline, plan.scheduled_start, plan.scheduled_end);
 
-          const sStr = new Date(plan.scheduled_start).toLocaleString('zh-CN', { month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit', hour12: false });
-          const eStr = new Date(plan.scheduled_end).toLocaleTimeString('zh-CN', { hour: '2-digit', minute: '2-digit', hour12: false });
+          // Dynamically optimize and adjust all tasks according to urgency & deadlines
+          replanUserTasks(userId);
+
+          const updatedTask = db.prepare('SELECT * FROM tasks WHERE user_id = ? AND title = ? ORDER BY id DESC LIMIT 1').get(userId, title) as Task;
+          const actualStart = updatedTask?.scheduled_start || plan.scheduled_start;
+          const actualEnd = updatedTask?.scheduled_end || plan.scheduled_end;
+
+          const sStr = new Date(actualStart).toLocaleString('zh-CN', { month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit', hour12: false });
+          const eStr = new Date(actualEnd).toLocaleTimeString('zh-CN', { hour: '2-digit', minute: '2-digit', hour12: false });
 
           const reply = templates.scheduleSuccess(title, sStr, eStr, duration!, urgency!, importance!);
           addDebugLog('Scheduler', 'success', `新待办规划排程成功: "${title}" (${sStr} ~ ${eStr})`);
@@ -616,12 +876,12 @@ class WeixinTransitManager {
               addDebugLog('Weixin', 'info', `📩 微信来信 (用户 #${userId}): "${userText}"`);
 
               // Process through scheduling pipeline
-              const { replyText } = await processWeChatMessage(userId, userText, fromUserId);
+              const { replyText, imageBuffer } = await processWeChatMessage(userId, userText, fromUserId);
 
               // Use the context token from msg or memory
               const activeContextToken = msg.context_token || contextTokenMap.get(userId) || settings.weixin_context_token;
 
-              // Send reply back to user
+              // Send text reply back to user
               await sendWeixinTextMessage(
                 baseUrl,
                 botToken,
@@ -630,6 +890,18 @@ class WeixinTransitManager {
                 replyText,
                 activeContextToken
               );
+
+              // If an image card was generated (e.g. for "查看日历" or "查看任务"), send image message
+              if (imageBuffer) {
+                await sendWeixinImageMessage(
+                  baseUrl,
+                  botToken,
+                  botId,
+                  fromUserId,
+                  imageBuffer,
+                  activeContextToken
+                );
+              }
             }
           }
         }

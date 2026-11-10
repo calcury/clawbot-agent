@@ -7,3 +7,4 @@ data/*.db*
 npm-debug.log*
 pnpm-debug.log*
 client/dist/
+server/assets/fonts/

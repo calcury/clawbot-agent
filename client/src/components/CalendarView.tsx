@@ -463,6 +463,20 @@ export const CalendarView: React.FC = () => {
     }
   };
 
+  const [replanLoading, setReplanLoading] = useState(false);
+
+  const handleSyncAndReplanAll = async () => {
+    setReplanLoading(true);
+    try {
+      await api.post('/calendar/sync-and-replan');
+      fetchData();
+    } catch (e: any) {
+      alert(`排程失败: ${e.response?.data?.error || e.message}`);
+    } finally {
+      setReplanLoading(false);
+    }
+  };
+
   const copyIcal = () => {
     navigator.clipboard.writeText(icalExportUrl);
     setCopiedIcal(true);
@@ -515,6 +529,16 @@ export const CalendarView: React.FC = () => {
               <span>同步中...</span>
             </span>
           )}
+
+          <button
+            onClick={handleSyncAndReplanAll}
+            disabled={replanLoading}
+            title="拉取最新外部日程并按任务紧急度自适应重新排程"
+            className="flex items-center gap-1.5 px-3.5 py-1.5 bg-blue-50 dark:bg-blue-950/60 hover:bg-blue-100 dark:hover:bg-blue-900/60 text-blue-700 dark:text-blue-300 border border-blue-200/90 dark:border-blue-800 rounded-full text-xs font-semibold shadow-2xs transition cursor-pointer"
+          >
+            <RefreshCw className={`w-3.5 h-3.5 ${replanLoading ? 'animate-spin' : ''}`} />
+            <span>{replanLoading ? '排程计算中...' : '同步并自适应重排'}</span>
+          </button>
 
           <button
             onClick={() => setShowCalendarsModal(true)}

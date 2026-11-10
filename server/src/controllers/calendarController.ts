@@ -2,7 +2,9 @@ import { Request, Response } from 'express';
 import { db } from '../config/database.js';
 import { AuthenticatedRequest } from '../middleware/auth.js';
 import { CalendarSubscription, ExternalEvent, Task, User } from '../models/types.js';
-import { syncSubscription, generateUserTodoIcal } from '../services/calendarSync.js';
+import { syncSubscription, syncAllUserSubscriptions, generateUserTodoIcal } from '../services/calendarSync.js';
+import { replanUserTasks } from '../services/scheduler.js';
+import { renderCalendarImage, renderTodoListImage } from '../services/cardRenderer.js';
 
 export function listSubscriptions(req: AuthenticatedRequest, res: Response): void {
   const userId = req.user!.id;
@@ -193,5 +195,54 @@ export function exportDedicatedIcal(req: Request, res: Response): void {
     res.send(icalContent);
   } catch (err: any) {
     res.status(500).send(`Error generating calendar: ${err.message}`);
+  }
+}
+
+/**
+ * Manually trigger full calendar sync and adaptive task replanning
+ */
+export async function syncAndReplanAll(req: AuthenticatedRequest, res: Response): Promise<void> {
+  const userId = req.user!.id;
+  try {
+    const syncRes = await syncAllUserSubscriptions(userId);
+    const replanRes = replanUserTasks(userId);
+    res.json({
+      message: `同步与自适应排程完成！`,
+      totalEvents: syncRes.totalEvents,
+      subscriptionsSynced: syncRes.subscriptionsSynced,
+      scheduledCount: replanRes.scheduledCount,
+      failedCount: replanRes.failedCount,
+      summary: replanRes.summary,
+    });
+  } catch (err: any) {
+    res.status(500).json({ error: `处理失败: ${err.message}` });
+  }
+}
+
+/**
+ * Preview today's calendar PNG card
+ */
+export async function previewCalendarCard(req: AuthenticatedRequest, res: Response): Promise<void> {
+  const userId = req.user!.id;
+  try {
+    const png = await renderCalendarImage(userId);
+    res.setHeader('Content-Type', 'image/png');
+    res.send(png);
+  } catch (err: any) {
+    res.status(500).json({ error: err.message });
+  }
+}
+
+/**
+ * Preview Todo list PNG card
+ */
+export async function previewTodoCard(req: AuthenticatedRequest, res: Response): Promise<void> {
+  const userId = req.user!.id;
+  try {
+    const png = await renderTodoListImage(userId);
+    res.setHeader('Content-Type', 'image/png');
+    res.send(png);
+  } catch (err: any) {
+    res.status(500).json({ error: err.message });
   }
 }

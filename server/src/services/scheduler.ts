@@ -281,3 +281,119 @@ export function scheduleTask(
     message: '排程计算成功',
   };
 }
+
+/**
+ * Fully re-plan and optimize all uncompleted tasks for a user
+ * Higher urgency and tighter deadlines take precedence (preemptive scheduling).
+ */
+export function replanUserTasks(userId: number): {
+  success: boolean;
+  totalTasks: number;
+  scheduledCount: number;
+  failedCount: number;
+  tasks: Task[];
+  summary: string;
+} {
+  const activeTasks = db.prepare(`
+    SELECT * FROM tasks
+    WHERE user_id = ? AND status IN ('scheduled', 'in_progress', 'pending')
+  `).all(userId) as Task[];
+
+  if (activeTasks.length === 0) {
+    return {
+      success: true,
+      totalTasks: 0,
+      scheduledCount: 0,
+      failedCount: 0,
+      tasks: [],
+      summary: '暂无可排程的待办任务',
+    };
+  }
+
+  const now = new Date();
+
+  // Sort by priority: higher score = schedule earlier
+  activeTasks.sort((a, b) => {
+    const scoreA = computeTaskPriority(a, now);
+    const scoreB = computeTaskPriority(b, now);
+    return scoreB - scoreA;
+  });
+
+  // Temporarily clear scheduled slots so scheduleTask can place them in priority order
+  const taskIds = activeTasks.map((t) => t.id);
+  const placeholders = taskIds.map(() => '?').join(',');
+  db.prepare(`
+    UPDATE tasks
+    SET scheduled_start = NULL, scheduled_end = NULL
+    WHERE id IN (${placeholders})
+  `).run(...taskIds);
+
+  let scheduledCount = 0;
+  let failedCount = 0;
+
+  for (const t of activeTasks) {
+    const res = scheduleTask(userId, {
+      id: t.id,
+      title: t.title,
+      duration_minutes: t.duration_minutes,
+      urgency: t.urgency,
+      importance: t.importance,
+      deadline: t.deadline,
+    });
+
+    if (res.success && res.scheduled_start && res.scheduled_end) {
+      db.prepare(`
+        UPDATE tasks
+        SET scheduled_start = ?, scheduled_end = ?, status = 'scheduled', updated_at = datetime('now', 'localtime')
+        WHERE id = ?
+      `).run(res.scheduled_start, res.scheduled_end, t.id);
+
+      t.scheduled_start = res.scheduled_start;
+      t.scheduled_end = res.scheduled_end;
+      t.status = 'scheduled';
+      scheduledCount++;
+    } else {
+      failedCount++;
+      db.prepare(`
+        UPDATE tasks
+        SET status = 'pending', updated_at = datetime('now', 'localtime')
+        WHERE id = ?
+      `).run(t.id);
+    }
+  }
+
+  const allUpdatedTasks = db.prepare(`
+    SELECT * FROM tasks
+    WHERE user_id = ? AND status IN ('scheduled', 'in_progress', 'completed')
+    ORDER BY scheduled_start ASC
+  `).all(userId) as Task[];
+
+  return {
+    success: true,
+    totalTasks: activeTasks.length,
+    scheduledCount,
+    failedCount,
+    tasks: allUpdatedTasks,
+    summary: `智能排程完成：共规划 ${scheduledCount} 项任务${failedCount > 0 ? `，${failedCount} 项暂无合适空闲时段` : ''}`,
+  };
+}
+
+function computeTaskPriority(t: Task, now: Date): number {
+  let score = (t.urgency || 3) * 30 + (t.importance || 3) * 20;
+  if (t.deadline) {
+    const ddl = new Date(t.deadline);
+    if (!isNaN(ddl.getTime())) {
+      const hoursLeft = (ddl.getTime() - now.getTime()) / (1000 * 60 * 60);
+      if (hoursLeft <= 0) {
+        score += 200; // Overdue or urgent DDL
+      } else if (hoursLeft < 12) {
+        score += 120;
+      } else if (hoursLeft < 24) {
+        score += 80;
+      } else if (hoursLeft < 48) {
+        score += 40;
+      }
+    }
+  }
+  return score;
+}
