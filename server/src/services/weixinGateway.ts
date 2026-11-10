@@ -438,7 +438,7 @@ export async function processWeChatMessage(
       addDebugLog('Weixin', 'error', `生成待办清单卡片图片失败: ${e.message}`);
     }
 
-    const countRow = db.prepare('SELECT count(*) as c FROM tasks WHERE user_id = ? AND status IN ("scheduled", "in_progress", "pending")').get(userId) as any;
+    const countRow = db.prepare(`SELECT count(*) as c FROM tasks WHERE user_id = ? AND status IN ('scheduled', 'in_progress', 'pending')`).get(userId) as any;
     const taskCount = countRow?.c || 0;
 
     const replyText =
