@@ -247,9 +247,9 @@ export const SystemDebugger: React.FC = () => {
   ];
 
   return (
-    <div className="w-full space-y-4">
+    <div className="w-full flex-1 min-h-0 flex flex-col space-y-3 overflow-hidden">
       {/* Top Header */}
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pb-1">
+      <div className="shrink-0 flex flex-col sm:flex-row sm:items-center justify-between gap-3 pb-1">
         <div>
           <div className="flex items-center gap-2">
             <h1 className="text-xl sm:text-2xl font-bold tracking-tight text-gray-900 dark:text-gray-100 flex items-center gap-2">
@@ -329,9 +329,9 @@ export const SystemDebugger: React.FC = () => {
 
       {/* 1. Live Logs Tab */}
       {activeTab === 'logs' && (
-        <div className="space-y-3">
+        <div className="flex-1 min-h-0 flex flex-col space-y-3 overflow-hidden">
           {/* Controls Bar */}
-          <div className="bg-white dark:bg-[#1e1f20] rounded-2xl p-3 border border-gray-200/80 dark:border-neutral-800/80 shadow-xs flex flex-col md:flex-row items-stretch md:items-center justify-between gap-3">
+          <div className="shrink-0 bg-white dark:bg-[#1e1f20] rounded-2xl p-3 border border-gray-200/80 dark:border-neutral-800/80 shadow-xs flex flex-col md:flex-row items-stretch md:items-center justify-between gap-3">
             {/* Filter pills */}
             <div className="flex items-center gap-2 flex-wrap">
               <div className="flex items-center gap-1 text-xs">
@@ -416,7 +416,7 @@ export const SystemDebugger: React.FC = () => {
           </div>
 
           {/* Log Stream Terminal Window */}
-          <div className="bg-[#1e1f20] text-gray-200 rounded-2xl border border-neutral-800 shadow-lg font-mono text-xs overflow-hidden flex flex-col h-[520px]">
+          <div className="bg-[#1e1f20] text-gray-200 rounded-2xl border border-neutral-800 shadow-lg font-mono text-xs overflow-hidden flex flex-col flex-1 min-h-[280px]">
             {/* Terminal Titlebar */}
             <div className="bg-[#18191a] px-4 py-2 border-b border-neutral-800 flex items-center justify-between text-[11px] text-neutral-400 select-none">
               <div className="flex items-center gap-2">
@@ -497,7 +497,8 @@ export const SystemDebugger: React.FC = () => {
 
       {/* 2. Inbound Message Simulation Tab */}
       {activeTab === 'inbound' && (
-        <div className="grid grid-cols-1 lg:grid-cols-12 gap-5 items-start">
+        <div className="flex-1 min-h-0 overflow-y-auto pr-1">
+          <div className="grid grid-cols-1 lg:grid-cols-12 gap-5 items-start">
           {/* Left Form: Input message */}
           <div className="lg:col-span-5 bg-white dark:bg-[#1e1f20] rounded-2xl p-5 border border-gray-200/80 dark:border-neutral-800/80 shadow-xs space-y-4">
             <div className="flex items-center gap-2 pb-3 border-b border-gray-100 dark:border-neutral-800">
@@ -668,11 +669,13 @@ export const SystemDebugger: React.FC = () => {
             )}
           </div>
         </div>
+      </div>
       )}
 
       {/* 3. Real WeChat Outbound Test Tab */}
       {activeTab === 'outbound' && (
-        <div className="max-w-2xl mx-auto bg-white dark:bg-[#1e1f20] rounded-2xl p-5 sm:p-6 border border-gray-200/80 dark:border-neutral-800/80 shadow-xs space-y-4">
+        <div className="flex-1 min-h-0 overflow-y-auto pr-1">
+          <div className="max-w-2xl mx-auto bg-white dark:bg-[#1e1f20] rounded-2xl p-5 sm:p-6 border border-gray-200/80 dark:border-neutral-800/80 shadow-xs space-y-4">
           <div className="flex items-center gap-2 pb-3 border-b border-gray-100 dark:border-neutral-800">
             <Smartphone className="w-5 h-5 text-emerald-600" />
             <div>
@@ -752,11 +755,13 @@ export const SystemDebugger: React.FC = () => {
             </div>
           )}
         </div>
+      </div>
       )}
 
       {/* 4. Workers Status Tab */}
       {activeTab === 'workers' && (
-        <div className="bg-white dark:bg-[#1e1f20] rounded-2xl p-5 border border-gray-200/80 dark:border-neutral-800/80 shadow-xs space-y-4">
+        <div className="flex-1 min-h-0 overflow-y-auto pr-1">
+          <div className="bg-white dark:bg-[#1e1f20] rounded-2xl p-5 border border-gray-200/80 dark:border-neutral-800/80 shadow-xs space-y-4">
           <div className="flex items-center justify-between pb-3 border-b border-gray-100 dark:border-neutral-800">
             <div className="flex items-center gap-2">
               <Bot className="w-4 h-4 text-blue-600 dark:text-blue-400" />
@@ -852,6 +857,7 @@ export const SystemDebugger: React.FC = () => {
             </table>
           </div>
         </div>
+      </div>
       )}
     </div>
   );

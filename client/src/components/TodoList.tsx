@@ -250,9 +250,9 @@ export const TodoList: React.FC = () => {
   ];
 
   return (
-    <div className="w-full space-y-4">
+    <div className="w-full flex-1 min-h-0 flex flex-col space-y-3 overflow-hidden">
       {/* Top Banner & Quick Stats */}
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pb-1">
+      <div className="shrink-0 flex flex-col sm:flex-row sm:items-center justify-between gap-3 pb-1">
         <div>
           <h1 className="text-xl sm:text-2xl font-bold tracking-tight text-gray-900 dark:text-gray-100">
             我的待办任务
@@ -281,9 +281,9 @@ export const TodoList: React.FC = () => {
       </div>
 
       {/* 左右排版: Left Sidebar (Categories + Quick Add) / Right Main (Task List) */}
-      <div className="flex flex-col lg:flex-row gap-5 items-start">
+      <div className="flex-1 min-h-0 flex flex-col lg:flex-row gap-4 items-stretch overflow-hidden">
         {/* Left Column: Filter Rail + Quick Task Add */}
-        <aside className="w-full lg:w-72 xl:w-80 shrink-0 space-y-4">
+        <aside className="w-full lg:w-72 xl:w-80 shrink-0 flex flex-col gap-3 overflow-y-auto pr-1">
           {/* 1. Category Filter Rail */}
           <div className="bg-white dark:bg-[#1e1f20] rounded-2xl p-3 border border-gray-200/80 dark:border-neutral-800/80 shadow-xs transition-colors">
             <div className="text-[11px] font-semibold tracking-wider uppercase text-gray-400 dark:text-neutral-500 px-3 py-1.5">
@@ -424,9 +424,9 @@ export const TodoList: React.FC = () => {
         </aside>
 
         {/* Right Column: Search + Task List */}
-        <section className="flex-1 min-w-0 w-full space-y-3">
+        <section className="flex-1 min-w-0 w-full flex flex-col gap-3 overflow-hidden">
           {/* Search bar & Active Filter Bar */}
-          <div className="bg-white dark:bg-[#1e1f20] rounded-2xl p-3 border border-gray-200/80 dark:border-neutral-800/80 shadow-xs flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-3 transition-colors">
+          <div className="shrink-0 bg-white dark:bg-[#1e1f20] rounded-2xl p-3 border border-gray-200/80 dark:border-neutral-800/80 shadow-xs flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-3 transition-colors">
             <div className="flex items-center gap-2">
               <span className="text-sm font-bold text-gray-900 dark:text-gray-100">
                 {filterCategories.find((c) => c.key === activeFilter)?.label || '任务清单'}
@@ -449,7 +449,7 @@ export const TodoList: React.FC = () => {
           </div>
 
           {/* Tasks List */}
-          <div className="bg-white dark:bg-[#1e1f20] rounded-2xl border border-gray-200/80 dark:border-neutral-800/80 shadow-xs divide-y divide-gray-100 dark:divide-neutral-800/80 overflow-hidden transition-colors">
+          <div className="flex-1 min-h-0 bg-white dark:bg-[#1e1f20] rounded-2xl border border-gray-200/80 dark:border-neutral-800/80 shadow-xs divide-y divide-gray-100 dark:divide-neutral-800/80 overflow-y-auto transition-colors">
             {loading ? (
               <div className="p-12 text-center text-gray-400 dark:text-neutral-500 text-xs sm:text-sm">
                 正在加载任务列表...

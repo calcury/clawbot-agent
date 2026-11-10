@@ -48,10 +48,11 @@ async function checkStartReminders() {
       const sStr = startTime.toLocaleTimeString('zh-CN', { hour: '2-digit', minute: '2-digit', hour12: false });
       const eStr = task.scheduled_end ? new Date(task.scheduled_end).toLocaleTimeString('zh-CN', { hour: '2-digit', minute: '2-digit', hour12: false }) : '';
 
+      // Mark as sent immediately to prevent race conditions and repeat sends
+      db.prepare("UPDATE tasks SET start_reminder_sent = 1, status = 'in_progress' WHERE id = ?").run(task.id);
+
       const msg = templates.reminderBeforeStart(task.title, sStr, eStr, leadMinutes);
       await sendClawbotMessage(settings, msg);
-
-      db.prepare('UPDATE tasks SET start_reminder_sent = 1, status = "in_progress" WHERE id = ?').run(task.id);
       console.log(`[Reminder] Sent START reminder for task #${task.id} (${task.title}) to user #${task.user_id}`);
     }
   }
@@ -82,10 +83,11 @@ async function checkEndReminders() {
 
     // If within trigger window
     if (now >= triggerTime && now <= new Date(endTime.getTime() + 15 * 60 * 1000)) {
+      // Mark as sent immediately to avoid repeat firing
+      db.prepare("UPDATE tasks SET end_reminder_sent = 1 WHERE id = ?").run(task.id);
+
       const msg = templates.reminderBeforeEnd(task.title, leadMinutes);
       await sendClawbotMessage(settings, msg);
-
-      db.prepare('UPDATE tasks SET end_reminder_sent = 1 WHERE id = ?').run(task.id);
       console.log(`[Reminder] Sent END check-in for task #${task.id} (${task.title}) to user #${task.user_id}`);
     }
   }

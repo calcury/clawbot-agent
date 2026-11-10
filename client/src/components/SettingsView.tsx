@@ -16,6 +16,7 @@ import {
   Send,
   LogOut,
   Trash2,
+  Bell,
 } from 'lucide-react';
 
 interface WorkSlot {
@@ -149,6 +150,7 @@ export const SettingsView: React.FC = () => {
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [saveSuccess, setSaveSuccess] = useState(false);
+  const [activeSection, setActiveSection] = useState<'weixin' | 'scheduler' | 'notification' | 'llm' | 'calendar'>('weixin');
 
   // Weixin Clawbot Integration State
   const [wxConnected, setWxConnected] = useState(false);
@@ -435,16 +437,59 @@ export const SettingsView: React.FC = () => {
     );
   }
 
+  const navMenuItems = [
+    {
+      id: 'weixin' as const,
+      label: '微信 Clawbot 对接',
+      desc: '扫码配对与微信消息通知',
+      icon: Bot,
+      badge: wxConnected ? '已连接' : '待配对',
+      badgeColor: wxConnected
+        ? 'bg-emerald-100 text-emerald-700 dark:bg-emerald-950/80 dark:text-emerald-300'
+        : 'bg-amber-100 text-amber-700 dark:bg-amber-950/80 dark:text-amber-300',
+    },
+    {
+      id: 'scheduler' as const,
+      label: '日程规划算法偏好',
+      desc: '作息时段与 24h 可视化',
+      icon: Clock,
+    },
+    {
+      id: 'notification' as const,
+      label: '提醒通知与前置周期',
+      desc: '任务开始/结束提前提醒',
+      icon: Bell,
+    },
+    {
+      id: 'llm' as const,
+      label: '大模型 DeepSeek',
+      desc: '语义抽取与任务解析 API',
+      icon: Brain,
+      badge: llmApiKey ? '已配置' : '未设置',
+      badgeColor: llmApiKey
+        ? 'bg-blue-100 text-blue-700 dark:bg-blue-950/80 dark:text-blue-300'
+        : 'bg-gray-100 text-gray-600 dark:bg-neutral-800 dark:text-neutral-400',
+    },
+    {
+      id: 'calendar' as const,
+      label: '外部日历订阅源',
+      desc: '双向防冲突与 iCal 导出',
+      icon: Calendar,
+      badge: subs.length > 0 ? `${subs.length}个源` : undefined,
+      badgeColor: 'bg-purple-100 text-purple-700 dark:bg-purple-950/80 dark:text-purple-300',
+    },
+  ];
+
   return (
-    <div className="w-full space-y-5">
+    <div className="w-full flex-1 min-h-0 flex flex-col space-y-3 sm:space-y-4 overflow-hidden">
       {/* Page Header (Google Tasks Style) */}
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 pb-1">
+      <div className="shrink-0 flex flex-col sm:flex-row sm:items-center justify-between gap-3 pb-1">
         <div>
           <h1 className="text-xl sm:text-2xl font-bold tracking-tight text-gray-900 dark:text-gray-100">
             设置与偏好配置
           </h1>
           <p className="text-xs sm:text-sm text-gray-500 dark:text-neutral-400 mt-0.5">
-            管理微信配对、大模型参数、日程规划算法偏好及外部日历同步
+            管理微信配对、日程规划偏好、提醒周期与大模型参数
           </p>
         </div>
 
@@ -459,55 +504,127 @@ export const SettingsView: React.FC = () => {
       </div>
 
       {saveSuccess && (
-        <div className="flex items-center gap-2.5 p-3.5 bg-emerald-50 dark:bg-emerald-950/40 border border-emerald-200 dark:border-emerald-800/80 text-emerald-800 dark:text-emerald-300 rounded-2xl text-xs sm:text-sm font-medium animate-fadeIn">
-          <CheckCircle2 className="w-5 h-5 text-emerald-600 dark:text-emerald-400 shrink-0" />
+        <div className="shrink-0 flex items-center gap-2.5 p-3 bg-emerald-50 dark:bg-emerald-950/40 border border-emerald-200 dark:border-emerald-800/80 text-emerald-800 dark:text-emerald-300 rounded-2xl text-xs sm:text-sm font-medium animate-fadeIn">
+          <CheckCircle2 className="w-4 h-4 text-emerald-600 dark:text-emerald-400 shrink-0" />
           <span>配置已成功保存！算法排程与微信提醒设置已即时生效。</span>
         </div>
       )}
 
-      {/* 左右两栏布局 (Side-by-side Grid) */}
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-5 items-start">
-        {/* Left Column: 微信对接 + LLM 配置 */}
-        <div className="space-y-5">
-          {/* 1. WeChat Pairing Section */}
-          <section className="bg-white dark:bg-[#1e1f20] rounded-2xl p-5 border border-gray-200/80 dark:border-neutral-800/80 shadow-xs space-y-4 transition-colors">
-            <div className="flex items-center gap-3 pb-3 border-b border-gray-100 dark:border-neutral-800">
-              <div className="w-9 h-9 rounded-xl bg-emerald-50 dark:bg-emerald-950/60 text-emerald-600 dark:text-emerald-400 flex items-center justify-center shrink-0">
-                <Bot className="w-4 h-4" />
-              </div>
-              <div>
-                <div className="flex items-center gap-2 flex-wrap">
-                  <h2 className="text-sm font-bold text-gray-900 dark:text-gray-100">微信 Clawbot 对接</h2>
-                  {wxConnected ? (
-                    <span className="inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full text-[10px] font-semibold bg-emerald-100 dark:bg-emerald-950/70 text-emerald-700 dark:text-emerald-300">
-                      <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse" />
-                      已连接
-                    </span>
-                  ) : (
-                    <span className="inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full text-[10px] font-semibold bg-amber-100 dark:bg-amber-950/70 text-amber-700 dark:text-amber-300">
-                      等待扫码配对
-                    </span>
-                  )}
-                </div>
-                <p className="text-[11px] text-gray-500 dark:text-neutral-400 mt-0.5">
-                  扫码绑定微信，日程提醒与状态汇报将直接推送到手机
-                </p>
-              </div>
-            </div>
+      {/* Mobile Horizontal Tabs Rail */}
+      <div className="lg:hidden shrink-0 flex items-center gap-2 overflow-x-auto pb-1 scrollbar-none">
+        {navMenuItems.map((item) => {
+          const Icon = item.icon;
+          const isActive = activeSection === item.id;
+          return (
+            <button
+              key={item.id}
+              onClick={() => setActiveSection(item.id)}
+              className={`flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-semibold shrink-0 transition cursor-pointer ${
+                isActive
+                  ? 'bg-blue-600 text-white shadow-xs'
+                  : 'bg-white dark:bg-[#1e1f20] text-gray-600 dark:text-neutral-300 border border-gray-200/80 dark:border-neutral-700/80'
+              }`}
+            >
+              <Icon className="w-3.5 h-3.5" />
+              <span>{item.label.split(' ')[0]}</span>
+              {item.badge && (
+                <span className={`text-[9px] px-1.5 py-0.2 rounded-full ${isActive ? 'bg-white/20 text-white' : item.badgeColor}`}>
+                  {item.badge}
+                </span>
+              )}
+            </button>
+          );
+        })}
+      </div>
 
-            <div>
+      {/* Main Left-Right Split Layout */}
+      <div className="flex-1 min-h-0 flex flex-col lg:flex-row gap-4 items-stretch overflow-hidden">
+        {/* Left Column: Vertical Nav List */}
+        <aside className="hidden lg:flex flex-col w-72 xl:w-80 shrink-0 bg-white dark:bg-[#1e1f20] rounded-2xl border border-gray-200/80 dark:border-neutral-800/80 p-3 shadow-xs space-y-1.5 overflow-y-auto scrollbar-thin">
+          <div className="text-[11px] font-semibold tracking-wider uppercase text-gray-400 dark:text-neutral-500 px-3 py-1.5">
+            配置目录
+          </div>
+          {navMenuItems.map((item) => {
+            const Icon = item.icon;
+            const isActive = activeSection === item.id;
+            return (
+              <button
+                key={item.id}
+                onClick={() => setActiveSection(item.id)}
+                className={`w-full flex items-start gap-3 p-3 rounded-xl text-left transition cursor-pointer group ${
+                  isActive
+                    ? 'bg-blue-50 dark:bg-blue-950/60 text-blue-700 dark:text-blue-300 font-semibold shadow-2xs border-l-4 border-blue-600'
+                    : 'text-gray-700 dark:text-neutral-300 hover:bg-gray-100/80 dark:hover:bg-neutral-800/60'
+                }`}
+              >
+                <div
+                  className={`p-2 rounded-lg shrink-0 mt-0.5 transition ${
+                    isActive
+                      ? 'bg-blue-600 text-white'
+                      : 'bg-gray-100 dark:bg-neutral-800 text-gray-500 dark:text-neutral-400 group-hover:text-blue-600'
+                  }`}
+                >
+                  <Icon className="w-4 h-4" />
+                </div>
+                <div className="flex-1 min-w-0">
+                  <div className="flex items-center justify-between gap-1">
+                    <span className="text-xs font-bold truncate">{item.label}</span>
+                    {item.badge && (
+                      <span className={`text-[10px] px-1.5 py-0.2 rounded-full font-mono shrink-0 ${item.badgeColor}`}>
+                        {item.badge}
+                      </span>
+                    )}
+                  </div>
+                  <p className="text-[10px] text-gray-400 dark:text-neutral-500 truncate mt-0.5 font-normal">
+                    {item.desc}
+                  </p>
+                </div>
+              </button>
+            );
+          })}
+        </aside>
+
+        {/* Right Column: Selected Config Panel */}
+        <section className="flex-1 min-w-0 bg-white dark:bg-[#1e1f20] rounded-2xl border border-gray-200/80 dark:border-neutral-800/80 p-5 sm:p-7 shadow-xs overflow-y-auto transition-colors scrollbar-thin">
+          {/* 1. WeChat Pairing Section */}
+          {activeSection === 'weixin' && (
+            <div className="space-y-5 animate-fadeIn">
+              <div className="flex items-center gap-3 pb-4 border-b border-gray-100 dark:border-neutral-800">
+                <div className="w-10 h-10 rounded-xl bg-emerald-50 dark:bg-emerald-950/60 text-emerald-600 dark:text-emerald-400 flex items-center justify-center shrink-0">
+                  <Bot className="w-5 h-5" />
+                </div>
+                <div>
+                  <div className="flex items-center gap-2 flex-wrap">
+                    <h2 className="text-base font-bold text-gray-900 dark:text-gray-100">微信 Clawbot 对接</h2>
+                    {wxConnected ? (
+                      <span className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-xs font-semibold bg-emerald-100 dark:bg-emerald-950/70 text-emerald-700 dark:text-emerald-300">
+                        <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse" />
+                        已连接
+                      </span>
+                    ) : (
+                      <span className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-xs font-semibold bg-amber-100 dark:bg-amber-950/70 text-amber-700 dark:text-amber-300">
+                        等待扫码配对
+                      </span>
+                    )}
+                  </div>
+                  <p className="text-xs text-gray-500 dark:text-neutral-400 mt-0.5">
+                    扫码绑定个人微信，日程提醒、排程进度与长图预览将直接下发到手机微信
+                  </p>
+                </div>
+              </div>
+
               {wxConnected ? (
-                <div className="bg-gray-50 dark:bg-[#28292a] border border-gray-200/80 dark:border-neutral-700/80 rounded-xl p-4 space-y-3">
-                  <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
-                    <div className="flex items-center gap-3">
-                      <div className="w-10 h-10 rounded-full bg-emerald-600 text-white flex items-center justify-center font-bold text-sm shadow-2xs">
+                <div className="bg-gray-50 dark:bg-[#28292a] border border-gray-200/80 dark:border-neutral-700/80 rounded-2xl p-5 space-y-4">
+                  <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+                    <div className="flex items-center gap-3.5">
+                      <div className="w-12 h-12 rounded-full bg-emerald-600 text-white flex items-center justify-center font-bold text-base shadow-xs">
                         {wxNickname ? wxNickname.slice(0, 1).toUpperCase() : 'W'}
                       </div>
                       <div>
-                        <h3 className="font-semibold text-gray-900 dark:text-gray-100 text-xs sm:text-sm">
+                        <h3 className="font-semibold text-gray-900 dark:text-gray-100 text-sm">
                           {wxNickname ? `已绑定微信：${wxNickname}` : '已绑定微信账号'}
                         </h3>
-                        <p className="text-[10px] font-mono text-gray-500 dark:text-neutral-400 mt-0.5 truncate max-w-xs">
+                        <p className="text-xs font-mono text-gray-500 dark:text-neutral-400 mt-0.5 truncate max-w-sm">
                           通讯 ID: {wxUserId || '已加密保护'}
                         </p>
                       </div>
@@ -518,7 +635,7 @@ export const SettingsView: React.FC = () => {
                         type="button"
                         onClick={handleSendTestMessage}
                         disabled={testSending}
-                        className="flex items-center gap-1.5 px-3 py-1.5 bg-white dark:bg-[#1e1f20] hover:bg-gray-100 dark:hover:bg-neutral-800 text-gray-700 dark:text-neutral-200 border border-gray-200 dark:border-neutral-700 font-medium text-xs rounded-full shadow-2xs transition disabled:opacity-50 cursor-pointer"
+                        className="flex items-center gap-1.5 px-4 py-2 bg-white dark:bg-[#1e1f20] hover:bg-gray-100 dark:hover:bg-neutral-800 text-gray-700 dark:text-neutral-200 border border-gray-200 dark:border-neutral-700 font-medium text-xs rounded-full shadow-2xs transition disabled:opacity-50 cursor-pointer"
                       >
                         {testSending ? <RefreshCw className="w-3.5 h-3.5 animate-spin" /> : <Send className="w-3.5 h-3.5 text-blue-600 dark:text-blue-400" />}
                         <span>{testSending ? '发送中...' : '测试微信通知'}</span>
@@ -526,34 +643,50 @@ export const SettingsView: React.FC = () => {
                       <button
                         type="button"
                         onClick={handleUnbindWeixin}
-                        className="flex items-center gap-1.5 px-3 py-1.5 bg-rose-50 dark:bg-rose-950/40 hover:bg-rose-100 dark:hover:bg-rose-900/40 text-rose-600 dark:text-rose-400 border border-rose-200 dark:border-rose-900 font-medium text-xs rounded-full transition cursor-pointer"
+                        className="flex items-center gap-1.5 px-4 py-2 bg-rose-50 dark:bg-rose-950/40 hover:bg-rose-100 dark:hover:bg-rose-900/40 text-rose-600 dark:text-rose-400 border border-rose-200 dark:border-rose-900 font-medium text-xs rounded-full transition cursor-pointer"
                       >
                         <LogOut className="w-3.5 h-3.5" />
-                        <span>解绑</span>
+                        <span>解绑账号</span>
                       </button>
                     </div>
                   </div>
 
                   {testResult && (
-                    <div className="text-xs p-2.5 bg-white dark:bg-[#1e1f20] border border-gray-200 dark:border-neutral-700 rounded-lg text-gray-700 dark:text-neutral-200 flex items-center gap-2">
-                      <CheckCircle2 className="w-3.5 h-3.5 text-emerald-600 shrink-0" />
+                    <div className="text-xs p-3 bg-white dark:bg-[#1e1f20] border border-gray-200 dark:border-neutral-700 rounded-xl text-gray-700 dark:text-neutral-200 flex items-center gap-2">
+                      <CheckCircle2 className="w-4 h-4 text-emerald-600 shrink-0" />
                       <span>{testResult}</span>
                     </div>
                   )}
 
-                  <div className="text-[11px] text-gray-500 dark:text-neutral-400 bg-white/70 dark:bg-[#1e1f20]/60 p-3 rounded-lg border border-gray-200/50 dark:border-neutral-700/50 leading-relaxed">
-                    💡 <span className="font-semibold text-gray-700 dark:text-neutral-200">使用提示：</span>微信中向此 Clawbot 发送日程安排要求（例如：“帮我安排明天下午写报告两小时，加急5分，周三前交”），机器人将自动抽取字段并在后台安排时间，并在开始/结束前通过微信主动提醒。
+                  <div className="text-xs text-gray-600 dark:text-neutral-400 bg-white/80 dark:bg-[#1e1f20]/60 p-4 rounded-xl border border-gray-200/50 dark:border-neutral-700/50 leading-relaxed space-y-2">
+                    <div className="font-semibold text-gray-800 dark:text-neutral-200 flex items-center gap-1.5">
+                      <span>💡 微信机器人使用指南与指令：</span>
+                    </div>
+                    <ul className="list-disc list-inside space-y-1 text-xs pl-1">
+                      <li>
+                        <strong className="text-gray-800 dark:text-gray-200">安排日程：</strong>发送如“帮我安排明天下午写报告两小时，加急5分，周三前交”，AI 自动提取关键要素并插入空闲时段。
+                      </li>
+                      <li>
+                        <strong className="text-gray-800 dark:text-gray-200">查看日历：</strong>发送“查看日历”，Clawbot 将即时生成当天日历日程图片发送至微信。
+                      </li>
+                      <li>
+                        <strong className="text-gray-800 dark:text-gray-200">查看任务：</strong>发送“查看任务”，Clawbot 将生成四象限 Todo List 视觉卡片发送至微信。
+                      </li>
+                      <li>
+                        <strong className="text-gray-800 dark:text-gray-200">任务结项：</strong>在任务结束前收到询问时，回复“已完成”即可快速更新状态。
+                      </li>
+                    </ul>
                   </div>
                 </div>
               ) : (
-                <div className="flex flex-col sm:flex-row items-center gap-5 bg-gray-50/70 dark:bg-[#28292a]/50 border border-gray-200/80 dark:border-neutral-700/80 rounded-xl p-4">
+                <div className="flex flex-col md:flex-row items-center gap-6 bg-gray-50/70 dark:bg-[#28292a]/50 border border-gray-200/80 dark:border-neutral-700/80 rounded-2xl p-6">
                   {/* QR Container */}
                   <div className="flex flex-col items-center shrink-0">
-                    <div className="w-40 h-40 bg-white p-2.5 rounded-xl border-2 border-dashed border-gray-300 shadow-2xs flex items-center justify-center relative overflow-hidden">
+                    <div className="w-48 h-48 bg-white p-3 rounded-2xl border-2 border-dashed border-gray-300 shadow-2xs flex items-center justify-center relative overflow-hidden">
                       {qrStatus === 'loading' && (
                         <div className="flex flex-col items-center gap-2 text-gray-400 text-xs">
-                          <RefreshCw className="w-5 h-5 animate-spin text-blue-600" />
-                          <span>生成中...</span>
+                          <RefreshCw className="w-6 h-6 animate-spin text-blue-600" />
+                          <span>正在获取登录二维码...</span>
                         </div>
                       )}
 
@@ -562,7 +695,7 @@ export const SettingsView: React.FC = () => {
                           {qrCodeImgContent ? (
                             <QRCodeSVG
                               value={qrCodeImgContent}
-                              size={144}
+                              size={168}
                               level="M"
                               includeMargin={false}
                             />
@@ -571,24 +704,24 @@ export const SettingsView: React.FC = () => {
                           )}
 
                           {qrStatus === 'scaned' && (
-                            <div className="absolute inset-0 bg-white/95 flex flex-col items-center justify-center text-center p-2 rounded-lg">
-                              <CheckCircle2 className="w-7 h-7 text-emerald-600 animate-bounce mb-1" />
-                              <span className="text-xs font-bold text-gray-900">扫码成功</span>
-                              <span className="text-[10px] text-gray-500">请在手机点击允许</span>
+                            <div className="absolute inset-0 bg-white/95 flex flex-col items-center justify-center text-center p-2 rounded-xl">
+                              <CheckCircle2 className="w-8 h-8 text-emerald-600 animate-bounce mb-1" />
+                              <span className="text-sm font-bold text-gray-900">扫码成功</span>
+                              <span className="text-xs text-gray-500">请在手机微信上点击【确认】</span>
                             </div>
                           )}
                         </div>
                       )}
 
                       {qrStatus === 'expired' && (
-                        <div className="flex flex-col items-center gap-1.5 text-center p-2">
-                          <AlertCircle className="w-6 h-6 text-amber-500" />
-                          <span className="text-xs text-gray-600 font-semibold">已过期</span>
+                        <div className="flex flex-col items-center gap-2 text-center p-3">
+                          <AlertCircle className="w-8 h-8 text-amber-500" />
+                          <span className="text-xs text-gray-600 font-semibold">二维码已过期</span>
                           <button
                             onClick={fetchQrCode}
                             className="text-xs text-blue-600 hover:underline font-bold"
                           >
-                            重新生成
+                            点击重新生成
                           </button>
                         </div>
                       )}
@@ -597,393 +730,474 @@ export const SettingsView: React.FC = () => {
                     <button
                       type="button"
                       onClick={fetchQrCode}
-                      className="mt-2 flex items-center gap-1 text-[11px] text-blue-600 dark:text-blue-400 hover:underline font-medium cursor-pointer"
+                      className="mt-3 flex items-center gap-1.5 text-xs text-blue-600 dark:text-blue-400 hover:underline font-medium cursor-pointer"
                     >
-                      <RefreshCw className="w-3 h-3" />
+                      <RefreshCw className="w-3.5 h-3.5" />
                       <span>刷新二维码</span>
                     </button>
                   </div>
 
                   {/* Steps */}
-                  <div className="space-y-2.5 text-xs">
+                  <div className="space-y-3 text-xs flex-1">
                     <div>
-                      <div className="flex items-center gap-1.5 font-bold text-xs sm:text-sm text-gray-900 dark:text-gray-100 mb-0.5">
+                      <div className="flex items-center gap-2 font-bold text-sm text-gray-900 dark:text-gray-100 mb-1">
                         <QrCode className="w-4 h-4 text-emerald-600" />
-                        <span>微信扫码免密配对</span>
+                        <span>微信扫码免密配对流程</span>
                       </div>
-                      <p className="text-[11px] text-gray-500 dark:text-neutral-400 leading-relaxed">
-                        手机微信扫一扫即可配对微信 Clawbot：
+                      <p className="text-xs text-gray-500 dark:text-neutral-400 leading-relaxed">
+                        手机微信扫一扫即可配对微信 Clawbot，实现日程双向联动：
                       </p>
                     </div>
 
-                    <ol className="space-y-1 text-[11px] text-gray-600 dark:text-neutral-300 list-decimal list-inside leading-relaxed">
+                    <ol className="space-y-1.5 text-xs text-gray-600 dark:text-neutral-300 list-decimal list-inside leading-relaxed pl-1">
                       <li>手机打开微信，点击右上角【+】号选择【扫一扫】；</li>
                       <li>扫描左侧二维码，在手机上确认【允许】；</li>
-                      <li>绑定完成后自动开启智能排程与双向消息推送。</li>
+                      <li>配对完成后系统将自动开启微信消息监听与主动任务提醒服务。</li>
                     </ol>
 
-                    <div className="p-2 bg-emerald-50 dark:bg-emerald-950/40 border border-emerald-100 dark:border-emerald-900/60 rounded-lg text-emerald-800 dark:text-emerald-300 text-[10px] flex items-center gap-1.5">
-                      <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 shrink-0" />
-                      <span>状态：{qrStatusMsg}</span>
+                    <div className="p-3 bg-emerald-50 dark:bg-emerald-950/40 border border-emerald-100 dark:border-emerald-900/60 rounded-xl text-emerald-800 dark:text-emerald-300 text-xs flex items-center gap-2">
+                      <span className="w-2 h-2 rounded-full bg-emerald-500 shrink-0" />
+                      <span>当前状态：{qrStatusMsg}</span>
                     </div>
                   </div>
                 </div>
               )}
             </div>
-          </section>
+          )}
 
-          {/* 2. LLM Config Section */}
-          <section className="bg-white dark:bg-[#1e1f20] rounded-2xl p-5 border border-gray-200/80 dark:border-neutral-800/80 shadow-xs space-y-4 transition-colors">
-            <div className="flex items-center gap-3 pb-3 border-b border-gray-100 dark:border-neutral-800">
-              <div className="w-9 h-9 rounded-xl bg-amber-50 dark:bg-amber-950/60 text-amber-600 dark:text-amber-400 flex items-center justify-center shrink-0">
-                <Brain className="w-4 h-4" />
-              </div>
-              <div>
-                <h2 className="text-sm font-bold text-gray-900 dark:text-gray-100">
-                  大语言模型配置 (LLM)
-                </h2>
-                <p className="text-[11px] text-gray-500 dark:text-neutral-400 mt-0.5">
-                  提取用户微信发来消息中的耗时、重要度、紧急度与DDL
-                </p>
-              </div>
-            </div>
-
-            <div className="space-y-3 text-xs">
-              <div>
-                <label className="block font-semibold text-gray-700 dark:text-neutral-300 mb-1">
-                  API 端点 (Base URL)
-                </label>
-                <input
-                  type="text"
-                  value={llmEndpoint}
-                  onChange={(e) => setLlmEndpoint(e.target.value)}
-                  placeholder="https://api.deepseek.com/v1"
-                  className="w-full px-3 py-2 bg-gray-50 dark:bg-[#28292a] border border-gray-200 dark:border-neutral-700 rounded-xl font-mono text-gray-800 dark:text-gray-100 outline-none transition focus:bg-white dark:focus:bg-[#232425] focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500"
-                />
-                <span className="text-[10px] text-gray-400 dark:text-neutral-500 mt-1 block">默认预设为 DeepSeek</span>
-              </div>
-
-              <div>
-                <label className="block font-semibold text-gray-700 dark:text-neutral-300 mb-1">
-                  API 密钥 (API Key)
-                </label>
-                <input
-                  type="password"
-                  value={llmApiKey}
-                  onChange={(e) => setLlmApiKey(e.target.value)}
-                  placeholder="sk-..."
-                  className="w-full px-3 py-2 bg-gray-50 dark:bg-[#28292a] border border-gray-200 dark:border-neutral-700 rounded-xl font-mono text-gray-800 dark:text-gray-100 outline-none transition focus:bg-white dark:focus:bg-[#232425] focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500"
-                />
-                <span className="text-[10px] text-gray-400 dark:text-neutral-500 mt-1 block">严格保存在本地数据库中隔离</span>
-              </div>
-
-              <div>
-                <label className="block font-semibold text-gray-700 dark:text-neutral-300 mb-1">
-                  模型型号 (Model)
-                </label>
-                <input
-                  type="text"
-                  value={llmModel}
-                  onChange={(e) => setLlmModel(e.target.value)}
-                  placeholder="deepseek-chat"
-                  className="w-full px-3 py-2 bg-gray-50 dark:bg-[#28292a] border border-gray-200 dark:border-neutral-700 rounded-xl font-mono text-gray-800 dark:text-gray-100 outline-none transition focus:bg-white dark:focus:bg-[#232425] focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500"
-                />
-                <span className="text-[10px] text-gray-400 dark:text-neutral-500 mt-1 block">如 deepseek-chat 或 gpt-4o-mini</span>
-              </div>
-            </div>
-          </section>
-        </div>
-
-        {/* Right Column: 算法偏好与工作时段可视化 + 日历同步 */}
-        <div className="space-y-5">
-          {/* 3. Schedule Preferences & 24h Visual Progress Bar */}
-          <section className="bg-white dark:bg-[#1e1f20] rounded-2xl p-5 border border-gray-200/80 dark:border-neutral-800/80 shadow-xs space-y-4 transition-colors">
-            <div className="flex items-center gap-3 pb-3 border-b border-gray-100 dark:border-neutral-800">
-              <div className="w-9 h-9 rounded-xl bg-blue-50 dark:bg-blue-950/60 text-blue-600 dark:text-blue-400 flex items-center justify-center shrink-0">
-                <Clock className="w-4 h-4" />
-              </div>
-              <div>
-                <h2 className="text-sm font-bold text-gray-900 dark:text-gray-100">
-                  日程规划算法偏好 & 提醒周期
-                </h2>
-                <p className="text-[11px] text-gray-500 dark:text-neutral-400 mt-0.5">
-                  配置工作作息时段、缓冲时长与提醒确认周期
-                </p>
-              </div>
-            </div>
-
-            {/* Manual Work Slots Input */}
-            <div className="space-y-3">
-              <div>
-                <label className="text-xs font-bold text-gray-800 dark:text-gray-200 flex items-center gap-1.5 mb-1">
-                  <span>自定义工作时段 (手动输入)</span>
-                </label>
-                <input
-                  type="text"
-                  value={workSlotsText}
-                  onChange={(e) => setWorkSlotsText(e.target.value)}
-                  placeholder="00:00-02:00, 13:00-18:00"
-                  className={`w-full px-3.5 py-2 bg-gray-50 dark:bg-[#28292a] border rounded-xl font-mono text-xs text-gray-800 dark:text-gray-100 focus:bg-white dark:focus:bg-[#232425] outline-none transition ${
-                    parsedSlotsInfo.error
-                      ? 'border-rose-300 dark:border-rose-700 focus:ring-2 focus:ring-rose-400/20'
-                      : 'border-gray-200 dark:border-neutral-700/80 focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500'
-                  }`}
-                />
-                {parsedSlotsInfo.error ? (
-                  <p className="text-xs text-rose-600 dark:text-rose-400 font-medium mt-1 flex items-center gap-1">
-                    <AlertCircle className="w-3 h-3 shrink-0" />
-                    <span>{parsedSlotsInfo.error}</span>
+          {/* 2. Scheduler Work Slots & Visual Timeline */}
+          {activeSection === 'scheduler' && (
+            <div className="space-y-5 animate-fadeIn">
+              <div className="flex items-center gap-3 pb-4 border-b border-gray-100 dark:border-neutral-800">
+                <div className="w-10 h-10 rounded-xl bg-blue-50 dark:bg-blue-950/60 text-blue-600 dark:text-blue-400 flex items-center justify-center shrink-0">
+                  <Clock className="w-5 h-5" />
+                </div>
+                <div>
+                  <h2 className="text-base font-bold text-gray-900 dark:text-gray-100">
+                    日程规划算法偏好
+                  </h2>
+                  <p className="text-xs text-gray-500 dark:text-neutral-400 mt-0.5">
+                    配置工作作息时段、24小时可用工时分布与任务缓冲间隔
                   </p>
-                ) : (
-                  <p className="text-[10px] text-gray-400 dark:text-neutral-500 mt-1">
-                    格式如 <span className="font-mono text-gray-600 dark:text-neutral-300 font-semibold">00:00-02:00, 13:00-18:00</span>。日程将只安排在亮色时段中。
-                  </p>
-                )}
+                </div>
               </div>
 
-              {/* 24-Hour Timeline Visual Progress Bar */}
-              <div className="p-3.5 bg-gray-50/90 dark:bg-[#28292a]/60 rounded-xl border border-gray-200/80 dark:border-neutral-700/80 space-y-2.5">
-                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-1 text-xs">
-                  <div className="flex items-center gap-2.5">
-                    <span className="font-bold text-gray-800 dark:text-gray-200 text-xs">24h 排程分布</span>
-                    <div className="flex items-center gap-2.5 text-[10px]">
-                      <span className="flex items-center gap-1">
-                        <span className="w-2.5 h-2.5 rounded-xs bg-blue-600 dark:bg-blue-500 inline-block shadow-2xs" />
-                        <span className="font-semibold text-blue-700 dark:text-blue-300">亮色: 可安排</span>
-                      </span>
-                      <span className="flex items-center gap-1">
-                        <span className="w-2.5 h-2.5 rounded-xs bg-gray-300 dark:bg-neutral-700 border border-gray-400/40 inline-block" />
-                        <span className="text-gray-500 dark:text-neutral-400">灰色: 休息</span>
-                      </span>
-                    </div>
-                  </div>
-
-                  {!parsedSlotsInfo.error && (
-                    <div className="text-[10px] text-gray-500 dark:text-neutral-400 font-medium">
-                      今日工时：<span className="font-bold text-blue-600 dark:text-blue-400">{(parsedSlotsInfo.totalMinutes / 60).toFixed(1)}h</span> / 24h
-                    </div>
+              {/* Manual Work Slots Input */}
+              <div className="space-y-4">
+                <div>
+                  <label className="text-xs font-bold text-gray-800 dark:text-gray-200 flex items-center gap-1.5 mb-1.5">
+                    <span>自定义工作时段 (手动输入)</span>
+                  </label>
+                  <input
+                    type="text"
+                    value={workSlotsText}
+                    onChange={(e) => setWorkSlotsText(e.target.value)}
+                    placeholder="00:00-02:00, 13:00-18:00"
+                    className={`w-full px-3.5 py-2.5 bg-gray-50 dark:bg-[#28292a] border rounded-xl font-mono text-xs text-gray-800 dark:text-gray-100 focus:bg-white dark:focus:bg-[#232425] outline-none transition ${
+                      parsedSlotsInfo.error
+                        ? 'border-rose-300 dark:border-rose-700 focus:ring-2 focus:ring-rose-400/20'
+                        : 'border-gray-200 dark:border-neutral-700/80 focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500'
+                    }`}
+                  />
+                  {parsedSlotsInfo.error ? (
+                    <p className="text-xs text-rose-600 dark:text-rose-400 font-medium mt-1.5 flex items-center gap-1.5">
+                      <AlertCircle className="w-3.5 h-3.5 shrink-0" />
+                      <span>{parsedSlotsInfo.error}</span>
+                    </p>
+                  ) : (
+                    <p className="text-xs text-gray-400 dark:text-neutral-500 mt-1.5">
+                      格式形如 <span className="font-mono text-gray-600 dark:text-neutral-300 font-semibold">00:00-02:00, 13:00-18:00</span>。日程将只安排在亮色时段中，支持跨夜与多时段。
+                    </p>
                   )}
                 </div>
 
-                {/* Visual Bar */}
-                <div className="relative w-full h-7 bg-gray-200 dark:bg-neutral-800 rounded-lg overflow-hidden shadow-inner flex items-center select-none border border-gray-300/80 dark:border-neutral-700">
-                  {parsedSlotsInfo.visualSlots.map((slot, idx) => {
-                    const leftPct = (slot.startMin / 1440) * 100;
-                    const widthPct = ((slot.endMin - slot.startMin) / 1440) * 100;
-                    const durationHours = ((slot.endMin - slot.startMin) / 60).toFixed(1);
-
-                    return (
-                      <div
-                        key={idx}
-                        style={{
-                          left: `${leftPct}%`,
-                          width: `${widthPct}%`,
-                        }}
-                        title={`可安排时段：${slot.label} (共 ${durationHours} 小时)`}
-                        className="absolute top-0 bottom-0 bg-blue-600 dark:bg-blue-500 hover:bg-blue-700 dark:hover:bg-blue-400 transition-colors flex items-center justify-center cursor-pointer shadow-xs"
-                      >
-                        {widthPct >= 6 && (
-                          <span className="text-[9px] text-white font-mono font-bold truncate px-1 text-center select-none drop-shadow-2xs">
-                            {slot.label}
-                          </span>
-                        )}
+                {/* 24-Hour Timeline Visual Progress Bar */}
+                <div className="p-4 bg-gray-50/90 dark:bg-[#28292a]/60 rounded-2xl border border-gray-200/80 dark:border-neutral-700/80 space-y-3">
+                  <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-1.5 text-xs">
+                    <div className="flex items-center gap-3">
+                      <span className="font-bold text-gray-800 dark:text-gray-200">24h 规划分布</span>
+                      <div className="flex items-center gap-3 text-xs">
+                        <span className="flex items-center gap-1.5">
+                          <span className="w-2.5 h-2.5 rounded-xs bg-blue-600 dark:bg-blue-500 inline-block shadow-2xs" />
+                          <span className="font-semibold text-blue-700 dark:text-blue-300">亮色: 可安排</span>
+                        </span>
+                        <span className="flex items-center gap-1.5">
+                          <span className="w-2.5 h-2.5 rounded-xs bg-gray-300 dark:bg-neutral-700 border border-gray-400/40 inline-block" />
+                          <span className="text-gray-500 dark:text-neutral-400">灰色: 休息</span>
+                        </span>
                       </div>
-                    );
-                  })}
+                    </div>
 
-                  {/* Grid Lines at 3h intervals */}
-                  {[3, 6, 9, 12, 15, 18, 21].map((hour) => (
-                    <div
-                      key={hour}
-                      style={{ left: `${(hour / 24) * 100}%` }}
-                      className="absolute top-0 bottom-0 w-px bg-gray-400/40 dark:bg-neutral-600/50 pointer-events-none"
+                    {!parsedSlotsInfo.error && (
+                      <div className="text-xs text-gray-500 dark:text-neutral-400 font-medium">
+                        今日工时：<span className="font-bold text-blue-600 dark:text-blue-400">{(parsedSlotsInfo.totalMinutes / 60).toFixed(1)}h</span> / 24h
+                      </div>
+                    )}
+                  </div>
+
+                  {/* Visual Bar */}
+                  <div className="relative w-full h-8 bg-gray-200 dark:bg-neutral-800 rounded-xl overflow-hidden shadow-inner flex items-center select-none border border-gray-300/80 dark:border-neutral-700">
+                    {parsedSlotsInfo.visualSlots.map((slot, idx) => {
+                      const leftPct = (slot.startMin / 1440) * 100;
+                      const widthPct = ((slot.endMin - slot.startMin) / 1440) * 100;
+                      const durationHours = ((slot.endMin - slot.startMin) / 60).toFixed(1);
+
+                      return (
+                        <div
+                          key={idx}
+                          style={{
+                            left: `${leftPct}%`,
+                            width: `${widthPct}%`,
+                          }}
+                          title={`可安排时段：${slot.label} (共 ${durationHours} 小时)`}
+                          className="absolute top-0 bottom-0 bg-blue-600 dark:bg-blue-500 hover:bg-blue-700 dark:hover:bg-blue-400 transition-colors flex items-center justify-center cursor-pointer shadow-xs"
+                        >
+                          {widthPct >= 6 && (
+                            <span className="text-[10px] text-white font-mono font-bold truncate px-1 text-center select-none drop-shadow-2xs">
+                              {slot.label}
+                            </span>
+                          )}
+                        </div>
+                      );
+                    })}
+
+                    {/* Grid Lines at 3h intervals */}
+                    {[3, 6, 9, 12, 15, 18, 21].map((hour) => (
+                      <div
+                        key={hour}
+                        style={{ left: `${(hour / 24) * 100}%` }}
+                        className="absolute top-0 bottom-0 w-px bg-gray-400/40 dark:bg-neutral-600/50 pointer-events-none"
+                      />
+                    ))}
+                  </div>
+
+                  {/* Hour Scale */}
+                  <div className="relative w-full h-4 overflow-hidden">
+                    {[0, 3, 6, 9, 12, 15, 18, 21, 24].map((hour) => (
+                      <span
+                        key={hour}
+                        style={{ left: `${(hour / 24) * 100}%` }}
+                        className={`absolute text-[10px] font-mono text-gray-400 dark:text-neutral-500 -translate-x-1/2 ${
+                          hour === 0 ? 'translate-x-0' : hour === 24 ? '-translate-x-full' : ''
+                        }`}
+                      >
+                        {String(hour).padStart(2, '0')}:00
+                      </span>
+                    ))}
+                  </div>
+                </div>
+
+                {/* Buffer Setting */}
+                <div className="pt-2">
+                  <label className="block font-semibold text-gray-700 dark:text-neutral-300 mb-1 text-xs">
+                    任务缓冲间隔 (分钟)
+                  </label>
+                  <input
+                    type="number"
+                    min="0"
+                    max="120"
+                    value={taskBuffer}
+                    onChange={(e) => setTaskBuffer(Number(e.target.value))}
+                    className="w-full sm:w-60 px-3.5 py-2 bg-gray-50 dark:bg-[#28292a] border border-gray-200 dark:border-neutral-700 rounded-xl font-mono text-gray-800 dark:text-gray-100 text-xs"
+                  />
+                  <p className="text-xs text-gray-400 dark:text-neutral-500 mt-1">
+                    两个任务之间自动预留的切换与休息间隔（建议 10-15 分钟）
+                  </p>
+                </div>
+              </div>
+            </div>
+          )}
+
+          {/* 3. Notification & Reminder Cycles */}
+          {activeSection === 'notification' && (
+            <div className="space-y-5 animate-fadeIn">
+              <div className="flex items-center gap-3 pb-4 border-b border-gray-100 dark:border-neutral-800">
+                <div className="w-10 h-10 rounded-xl bg-rose-50 dark:bg-rose-950/60 text-rose-600 dark:text-rose-400 flex items-center justify-center shrink-0">
+                  <Bell className="w-5 h-5" />
+                </div>
+                <div>
+                  <h2 className="text-base font-bold text-gray-900 dark:text-gray-100">
+                    提醒通知与前置周期
+                  </h2>
+                  <p className="text-xs text-gray-500 dark:text-neutral-400 mt-0.5">
+                    设置任务开始前与结束前主动推送微信通知的提前量与防重复策略
+                  </p>
+                </div>
+              </div>
+
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-5 text-xs">
+                {/* Start reminder */}
+                <div className="p-4 bg-gray-50/80 dark:bg-[#28292a]/50 rounded-2xl border border-gray-200/80 dark:border-neutral-700/80 space-y-3">
+                  <div>
+                    <label className="block font-bold text-gray-800 dark:text-gray-200 mb-1">
+                      开始前微信提醒 (分钟)
+                    </label>
+                    <p className="text-xs text-gray-500 dark:text-neutral-400 mb-2">
+                      在任务即将开始前通过微信通知您准备开始
+                    </p>
+                    <input
+                      type="number"
+                      min="1"
+                      max="60"
+                      value={remindStart}
+                      onChange={(e) => setRemindStart(Number(e.target.value))}
+                      className="w-full px-3.5 py-2 bg-white dark:bg-[#1e1f20] border border-gray-200 dark:border-neutral-700 rounded-xl font-mono text-gray-800 dark:text-gray-100 text-xs"
                     />
-                  ))}
+                  </div>
+                  <div className="flex items-center gap-2 flex-wrap">
+                    {[5, 10, 15, 30].map((mins) => (
+                      <button
+                        key={mins}
+                        type="button"
+                        onClick={() => setRemindStart(mins)}
+                        className={`px-3 py-1 rounded-lg text-xs font-mono font-medium transition cursor-pointer ${
+                          remindStart === mins
+                            ? 'bg-blue-600 text-white'
+                            : 'bg-white dark:bg-[#1e1f20] border border-gray-200 dark:border-neutral-700 text-gray-600 dark:text-neutral-300'
+                        }`}
+                      >
+                        {mins} 分钟
+                      </button>
+                    ))}
+                  </div>
                 </div>
 
-                {/* Hour Scale */}
-                <div className="relative w-full h-3.5 overflow-hidden">
-                  {[0, 3, 6, 9, 12, 15, 18, 21, 24].map((hour) => (
-                    <span
-                      key={hour}
-                      style={{ left: `${(hour / 24) * 100}%` }}
-                      className={`absolute text-[9px] font-mono text-gray-400 dark:text-neutral-500 -translate-x-1/2 ${
-                        hour === 0 ? 'translate-x-0' : hour === 24 ? '-translate-x-full' : ''
-                      }`}
-                    >
-                      {String(hour).padStart(2, '0')}:00
-                    </span>
-                  ))}
+                {/* End reminder */}
+                <div className="p-4 bg-gray-50/80 dark:bg-[#28292a]/50 rounded-2xl border border-gray-200/80 dark:border-neutral-700/80 space-y-3">
+                  <div>
+                    <label className="block font-bold text-gray-800 dark:text-gray-200 mb-1">
+                      结束前微信确认 (分钟)
+                    </label>
+                    <p className="text-xs text-gray-500 dark:text-neutral-400 mb-2">
+                      在任务到期前询问完成情况，可回复“已完成”结项
+                    </p>
+                    <input
+                      type="number"
+                      min="1"
+                      max="60"
+                      value={remindEnd}
+                      onChange={(e) => setRemindEnd(Number(e.target.value))}
+                      className="w-full px-3.5 py-2 bg-white dark:bg-[#1e1f20] border border-gray-200 dark:border-neutral-700 rounded-xl font-mono text-gray-800 dark:text-gray-100 text-xs"
+                    />
+                  </div>
+                  <div className="flex items-center gap-2 flex-wrap">
+                    {[3, 5, 10, 15].map((mins) => (
+                      <button
+                        key={mins}
+                        type="button"
+                        onClick={() => setRemindEnd(mins)}
+                        className={`px-3 py-1 rounded-lg text-xs font-mono font-medium transition cursor-pointer ${
+                          remindEnd === mins
+                            ? 'bg-blue-600 text-white'
+                            : 'bg-white dark:bg-[#1e1f20] border border-gray-200 dark:border-neutral-700 text-gray-600 dark:text-neutral-300'
+                        }`}
+                      >
+                        {mins} 分钟
+                      </button>
+                    ))}
+                  </div>
                 </div>
               </div>
-            </div>
 
-            {/* Other Preference Inputs */}
-            <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 pt-2 border-t border-gray-100 dark:border-neutral-800 text-xs">
-              <div>
-                <label className="block font-semibold text-gray-700 dark:text-neutral-300 mb-1 text-[11px]">
-                  任务缓冲间隔 (分钟)
-                </label>
-                <input
-                  type="number"
-                  min="0"
-                  max="120"
-                  value={taskBuffer}
-                  onChange={(e) => setTaskBuffer(Number(e.target.value))}
-                  className="w-full px-3 py-1.5 bg-gray-50 dark:bg-[#28292a] border border-gray-200 dark:border-neutral-700 rounded-xl font-mono text-gray-800 dark:text-gray-100 text-xs"
-                />
-              </div>
-
-              <div>
-                <label className="block font-semibold text-gray-700 dark:text-neutral-300 mb-1 text-[11px]">
-                  开始前微信提醒 (分钟)
-                </label>
-                <input
-                  type="number"
-                  min="1"
-                  max="60"
-                  value={remindStart}
-                  onChange={(e) => setRemindStart(Number(e.target.value))}
-                  className="w-full px-3 py-1.5 bg-gray-50 dark:bg-[#28292a] border border-gray-200 dark:border-neutral-700 rounded-xl font-mono text-gray-800 dark:text-gray-100 text-xs"
-                />
-              </div>
-
-              <div>
-                <label className="block font-semibold text-gray-700 dark:text-neutral-300 mb-1 text-[11px]">
-                  结束前微信确认 (分钟)
-                </label>
-                <input
-                  type="number"
-                  min="1"
-                  max="60"
-                  value={remindEnd}
-                  onChange={(e) => setRemindEnd(Number(e.target.value))}
-                  className="w-full px-3 py-1.5 bg-gray-50 dark:bg-[#28292a] border border-gray-200 dark:border-neutral-700 rounded-xl font-mono text-gray-800 dark:text-gray-100 text-xs"
-                />
-              </div>
-            </div>
-          </section>
-
-          {/* 4. External Calendar Subscriptions & Export */}
-          <section className="bg-white dark:bg-[#1e1f20] rounded-2xl p-5 border border-gray-200/80 dark:border-neutral-800/80 shadow-xs space-y-4 transition-colors">
-            <div className="flex items-center gap-3 pb-3 border-b border-gray-100 dark:border-neutral-800">
-              <div className="w-9 h-9 rounded-xl bg-purple-50 dark:bg-purple-950/60 text-purple-600 dark:text-purple-400 flex items-center justify-center shrink-0">
-                <Calendar className="w-4 h-4" />
-              </div>
-              <div>
-                <h2 className="text-sm font-bold text-gray-900 dark:text-gray-100">
-                  外部日历与订阅同步
-                </h2>
-                <p className="text-[11px] text-gray-500 dark:text-neutral-400 mt-0.5">
-                  导入外部日历自动避开日程冲突 · 导出专属 TODO 订阅链接
+              {/* Notification Mechanism Card */}
+              <div className="p-4 bg-blue-50/60 dark:bg-blue-950/30 border border-blue-200/60 dark:border-blue-900/40 rounded-2xl space-y-2 text-xs">
+                <div className="font-bold text-blue-900 dark:text-blue-200 flex items-center gap-1.5">
+                  <CheckCircle2 className="w-4 h-4 text-blue-600 dark:text-blue-400 shrink-0" />
+                  <span>微信智能提醒策略机制已就绪：</span>
+                </div>
+                <p className="text-blue-800/80 dark:text-blue-300/80 leading-relaxed">
+                  系统每 30 秒执行一次精准日程核验。当任务到达设定的前置时间窗口时，将<strong className="text-blue-950 dark:text-blue-100">仅发送一次</strong>微信通知并原子记录状态，避免任何重复刷屏打扰。
                 </p>
               </div>
             </div>
+          )}
 
-            {/* Export TODO link */}
-            <div className="p-3 bg-gray-50 dark:bg-[#28292a] rounded-xl border border-gray-200/80 dark:border-neutral-700/80 space-y-1.5 text-xs">
-              <label className="block font-semibold text-gray-700 dark:text-neutral-300 text-[11px]">
-                TODO 专属日历订阅 (导出至 iPhone / Mac / Google Calendar)
-              </label>
-              <div className="flex items-center gap-2">
-                <input
-                  type="text"
-                  readOnly
-                  value={icalExportUrl}
-                  className="w-full px-3 py-1.5 bg-white dark:bg-[#232425] border border-gray-200 dark:border-neutral-700 rounded-lg font-mono text-[11px] text-gray-700 dark:text-neutral-300 select-all"
-                />
-                <button
-                  type="button"
-                  onClick={copyIcal}
-                  className="px-3 py-1.5 bg-gray-200 dark:bg-neutral-700 hover:bg-gray-300 dark:hover:bg-neutral-600 text-gray-800 dark:text-neutral-200 text-xs font-medium rounded-lg shrink-0 flex items-center gap-1 transition cursor-pointer"
-                >
-                  {copiedIcal ? <Check className="w-3 h-3 text-emerald-600" /> : <Copy className="w-3 h-3" />}
-                  <span>{copiedIcal ? '已复制' : '复制'}</span>
-                </button>
+          {/* 4. LLM Config Section */}
+          {activeSection === 'llm' && (
+            <div className="space-y-5 animate-fadeIn">
+              <div className="flex items-center gap-3 pb-4 border-b border-gray-100 dark:border-neutral-800">
+                <div className="w-10 h-10 rounded-xl bg-amber-50 dark:bg-amber-950/60 text-amber-600 dark:text-amber-400 flex items-center justify-center shrink-0">
+                  <Brain className="w-5 h-5" />
+                </div>
+                <div>
+                  <h2 className="text-base font-bold text-gray-900 dark:text-gray-100">
+                    大语言模型配置 (LLM)
+                  </h2>
+                  <p className="text-xs text-gray-500 dark:text-neutral-400 mt-0.5">
+                    从微信用户消息中抽取任务名称、预计耗时、加急度、重要度与截止时间 (DDL)
+                  </p>
+                </div>
+              </div>
+
+              <div className="space-y-4 text-xs max-w-xl">
+                <div>
+                  <label className="block font-semibold text-gray-700 dark:text-neutral-300 mb-1.5">
+                    API 端点 (Base URL)
+                  </label>
+                  <input
+                    type="text"
+                    value={llmEndpoint}
+                    onChange={(e) => setLlmEndpoint(e.target.value)}
+                    placeholder="https://api.deepseek.com/v1"
+                    className="w-full px-3.5 py-2.5 bg-gray-50 dark:bg-[#28292a] border border-gray-200 dark:border-neutral-700 rounded-xl font-mono text-gray-800 dark:text-gray-100 outline-none transition focus:bg-white dark:focus:bg-[#232425] focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500"
+                  />
+                  <span className="text-[11px] text-gray-400 dark:text-neutral-500 mt-1 block">默认预设为 DeepSeek 官方端点</span>
+                </div>
+
+                <div>
+                  <label className="block font-semibold text-gray-700 dark:text-neutral-300 mb-1.5">
+                    API 密钥 (API Key)
+                  </label>
+                  <input
+                    type="password"
+                    value={llmApiKey}
+                    onChange={(e) => setLlmApiKey(e.target.value)}
+                    placeholder="sk-..."
+                    className="w-full px-3.5 py-2.5 bg-gray-50 dark:bg-[#28292a] border border-gray-200 dark:border-neutral-700 rounded-xl font-mono text-gray-800 dark:text-gray-100 outline-none transition focus:bg-white dark:focus:bg-[#232425] focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500"
+                  />
+                  <span className="text-[11px] text-gray-400 dark:text-neutral-500 mt-1 block">安全存储在服务器 SQLite 数据库中并按用户完全隔离</span>
+                </div>
+
+                <div>
+                  <label className="block font-semibold text-gray-700 dark:text-neutral-300 mb-1.5">
+                    模型型号 (Model)
+                  </label>
+                  <input
+                    type="text"
+                    value={llmModel}
+                    onChange={(e) => setLlmModel(e.target.value)}
+                    placeholder="deepseek-chat"
+                    className="w-full px-3.5 py-2.5 bg-gray-50 dark:bg-[#28292a] border border-gray-200 dark:border-neutral-700 rounded-xl font-mono text-gray-800 dark:text-gray-100 outline-none transition focus:bg-white dark:focus:bg-[#232425] focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500"
+                  />
+                  <span className="text-[11px] text-gray-400 dark:text-neutral-500 mt-1 block">推荐 deepseek-chat 或兼容 OpenAI 的模型名称</span>
+                </div>
               </div>
             </div>
+          )}
 
-            {/* Add external sub */}
-            <form onSubmit={handleAddSubscription} className="flex flex-col sm:flex-row items-stretch sm:items-center gap-2 text-xs">
-              <input
-                type="text"
-                value={newSubName}
-                onChange={(e) => setNewSubName(e.target.value)}
-                placeholder="日历名称 (如: 日常会议)"
-                className="w-full sm:w-40 px-3 py-2 bg-gray-50 dark:bg-[#28292a] border border-gray-200 dark:border-neutral-700 rounded-xl text-gray-800 dark:text-gray-100 outline-none"
-                required
-              />
-              <input
-                type="text"
-                value={newSubUrl}
-                onChange={(e) => setNewSubUrl(e.target.value)}
-                placeholder="订阅链接 (webcal://... 或 https://...ics)"
-                className="w-full px-3 py-2 bg-gray-50 dark:bg-[#28292a] border border-gray-200 dark:border-neutral-700 rounded-xl font-mono text-gray-800 dark:text-gray-100 outline-none"
-                required
-              />
-              <button
-                type="submit"
-                disabled={addingSub}
-                className="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white font-medium rounded-xl shrink-0 transition disabled:opacity-50 cursor-pointer"
-              >
-                {addingSub ? '添加中...' : '添加日历'}
-              </button>
-            </form>
-
-            {/* Subscriptions list */}
-            <div className="space-y-2 text-xs">
-              {subs.length === 0 ? (
-                <div className="p-4 text-center text-gray-400 dark:text-neutral-500 bg-gray-50 dark:bg-[#28292a]/50 rounded-xl border border-dashed border-gray-200 dark:border-neutral-800 text-[11px]">
-                  暂未导入外部日历。填入 Apple / Google 日历订阅即可规避已有日程。
+          {/* 5. External Calendar Subscriptions & Export */}
+          {activeSection === 'calendar' && (
+            <div className="space-y-5 animate-fadeIn">
+              <div className="flex items-center gap-3 pb-4 border-b border-gray-100 dark:border-neutral-800">
+                <div className="w-10 h-10 rounded-xl bg-purple-50 dark:bg-purple-950/60 text-purple-600 dark:text-purple-400 flex items-center justify-center shrink-0">
+                  <Calendar className="w-5 h-5" />
                 </div>
-              ) : (
-                subs.map((sub) => (
-                  <div
-                    key={sub.id}
-                    className="flex items-center justify-between p-2.5 bg-gray-50 dark:bg-[#28292a] border border-gray-200/80 dark:border-neutral-700/80 rounded-xl"
-                  >
-                    <div className="space-y-0.5 max-w-xs sm:max-w-sm truncate">
-                      <div className="flex items-center gap-2">
-                        <span className="font-bold text-gray-900 dark:text-gray-100 text-xs">{sub.name}</span>
-                        <span
-                          className={`text-[9px] font-semibold px-1.5 py-0.5 rounded-full ${
-                            sub.sync_status === 'ok'
-                              ? 'bg-emerald-100 dark:bg-emerald-950/60 text-emerald-700 dark:text-emerald-300'
-                              : 'bg-rose-100 dark:bg-rose-950/60 text-rose-700 dark:text-rose-300'
-                          }`}
-                        >
-                          {sub.sync_status === 'ok' ? `正常 (${sub.event_count}条)` : '异常'}
-                        </span>
-                      </div>
-                      <div className="font-mono text-[10px] text-gray-400 dark:text-neutral-500 truncate">
-                        {sub.url}
-                      </div>
-                    </div>
+                <div>
+                  <h2 className="text-base font-bold text-gray-900 dark:text-gray-100">
+                    外部日历与订阅同步
+                  </h2>
+                  <p className="text-xs text-gray-500 dark:text-neutral-400 mt-0.5">
+                    导入外部日历自动避开日程冲突 · 导出专属 TODO 订阅链接至手机日历
+                  </p>
+                </div>
+              </div>
 
-                    <div className="flex items-center gap-1">
-                      <button
-                        type="button"
-                        onClick={() => handleSyncNow(sub.id)}
-                        className="p-1.5 text-blue-600 dark:text-blue-400 hover:bg-blue-50 dark:hover:bg-blue-950/50 rounded-full transition cursor-pointer"
-                        title="立即同步"
-                      >
-                        <RefreshCw className="w-3.5 h-3.5" />
-                      </button>
-                      <button
-                        type="button"
-                        onClick={() => handleDeleteSubscription(sub.id)}
-                        className="p-1.5 text-rose-500 dark:text-rose-400 hover:bg-rose-50 dark:hover:bg-rose-950/50 rounded-full transition cursor-pointer"
-                        title="删除"
-                      >
-                        <Trash2 className="w-3.5 h-3.5" />
-                      </button>
-                    </div>
+              {/* Export TODO link */}
+              <div className="p-4 bg-gray-50 dark:bg-[#28292a] rounded-2xl border border-gray-200/80 dark:border-neutral-700/80 space-y-2 text-xs">
+                <label className="block font-bold text-gray-800 dark:text-neutral-200 text-xs">
+                  TODO 专属日历订阅 (导出至 iPhone / Mac / Google Calendar)
+                </label>
+                <div className="flex items-center gap-2">
+                  <input
+                    type="text"
+                    readOnly
+                    value={icalExportUrl}
+                    className="w-full px-3.5 py-2 bg-white dark:bg-[#232425] border border-gray-200 dark:border-neutral-700 rounded-xl font-mono text-xs text-gray-700 dark:text-neutral-300 select-all"
+                  />
+                  <button
+                    type="button"
+                    onClick={copyIcal}
+                    className="px-4 py-2 bg-gray-200 dark:bg-neutral-700 hover:bg-gray-300 dark:hover:bg-neutral-600 text-gray-800 dark:text-neutral-200 text-xs font-medium rounded-xl shrink-0 flex items-center gap-1.5 transition cursor-pointer"
+                  >
+                    {copiedIcal ? <Check className="w-3.5 h-3.5 text-emerald-600" /> : <Copy className="w-3.5 h-3.5" />}
+                    <span>{copiedIcal ? '已复制' : '复制'}</span>
+                  </button>
+                </div>
+              </div>
+
+              {/* Add external sub */}
+              <form onSubmit={handleAddSubscription} className="flex flex-col sm:flex-row items-stretch sm:items-center gap-2.5 text-xs">
+                <input
+                  type="text"
+                  value={newSubName}
+                  onChange={(e) => setNewSubName(e.target.value)}
+                  placeholder="日历名称 (如: 日常会议)"
+                  className="w-full sm:w-48 px-3.5 py-2 bg-gray-50 dark:bg-[#28292a] border border-gray-200 dark:border-neutral-700 rounded-xl text-gray-800 dark:text-gray-100 outline-none"
+                  required
+                />
+                <input
+                  type="text"
+                  value={newSubUrl}
+                  onChange={(e) => setNewSubUrl(e.target.value)}
+                  placeholder="订阅链接 (webcal://... 或 https://...ics)"
+                  className="w-full px-3.5 py-2 bg-gray-50 dark:bg-[#28292a] border border-gray-200 dark:border-neutral-700 rounded-xl font-mono text-gray-800 dark:text-gray-100 outline-none"
+                  required
+                />
+                <button
+                  type="submit"
+                  disabled={addingSub}
+                  className="px-5 py-2 bg-blue-600 hover:bg-blue-700 text-white font-medium rounded-xl shrink-0 transition disabled:opacity-50 cursor-pointer"
+                >
+                  {addingSub ? '添加中...' : '添加日历'}
+                </button>
+              </form>
+
+              {/* Subscriptions list */}
+              <div className="space-y-2.5 text-xs">
+                <div className="font-semibold text-gray-700 dark:text-neutral-300">已订阅日历源列表：</div>
+                {subs.length === 0 ? (
+                  <div className="p-6 text-center text-gray-400 dark:text-neutral-500 bg-gray-50 dark:bg-[#28292a]/50 rounded-2xl border border-dashed border-gray-200 dark:border-neutral-800 text-xs">
+                    暂未导入外部日历。填入 Apple / Google 日历订阅链接即可自动规避已有日程。
                   </div>
-                ))
-              )}
+                ) : (
+                  subs.map((sub) => (
+                    <div
+                      key={sub.id}
+                      className="flex items-center justify-between p-3.5 bg-gray-50 dark:bg-[#28292a] border border-gray-200/80 dark:border-neutral-700/80 rounded-xl"
+                    >
+                      <div className="space-y-1 max-w-xs sm:max-w-md truncate">
+                        <div className="flex items-center gap-2">
+                          <span className="font-bold text-gray-900 dark:text-gray-100 text-xs">{sub.name}</span>
+                          <span
+                            className={`text-[10px] font-semibold px-2 py-0.5 rounded-full ${
+                              sub.sync_status === 'ok'
+                                ? 'bg-emerald-100 dark:bg-emerald-950/60 text-emerald-700 dark:text-emerald-300'
+                                : 'bg-rose-100 dark:bg-rose-950/60 text-rose-700 dark:text-rose-300'
+                            }`}
+                          >
+                            {sub.sync_status === 'ok' ? `正常 (${sub.event_count}条)` : '异常'}
+                          </span>
+                        </div>
+                        <div className="font-mono text-[10px] text-gray-400 dark:text-neutral-500 truncate">
+                          {sub.url}
+                        </div>
+                      </div>
+
+                      <div className="flex items-center gap-1.5">
+                        <button
+                          type="button"
+                          onClick={() => handleSyncNow(sub.id)}
+                          className="p-2 text-blue-600 dark:text-blue-400 hover:bg-blue-50 dark:hover:bg-blue-950/50 rounded-full transition cursor-pointer"
+                          title="立即同步"
+                        >
+                          <RefreshCw className="w-4 h-4" />
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => handleDeleteSubscription(sub.id)}
+                          className="p-2 text-rose-500 dark:text-rose-400 hover:bg-rose-50 dark:hover:bg-rose-950/50 rounded-full transition cursor-pointer"
+                          title="删除"
+                        >
+                          <Trash2 className="w-4 h-4" />
+                        </button>
+                      </div>
+                    </div>
+                  ))
+                )}
+              </div>
             </div>
-          </section>
-        </div>
+          )}
+        </section>
       </div>
     </div>
   );

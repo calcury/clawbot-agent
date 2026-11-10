@@ -296,7 +296,7 @@ export function replanUserTasks(userId: number): {
 } {
   const activeTasks = db.prepare(`
     SELECT * FROM tasks
-    WHERE user_id = ? AND status IN ('scheduled', 'in_progress', 'pending')
+    WHERE user_id = ? AND status IN ('scheduled', 'pending')
   `).all(userId) as Task[];
 
   if (activeTasks.length === 0) {

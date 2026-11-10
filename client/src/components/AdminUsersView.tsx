@@ -95,9 +95,9 @@ export const AdminUsersView: React.FC<{ onRefreshCount?: () => void }> = ({ onRe
   const pendingCount = users.filter((u) => u.status === 'pending').length;
 
   return (
-    <div className="max-w-5xl mx-auto space-y-5 sm:space-y-6">
+    <div className="w-full max-w-5xl mx-auto flex-1 min-h-0 flex flex-col space-y-4 overflow-hidden">
       {/* Header */}
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+      <div className="shrink-0 flex flex-col sm:flex-row sm:items-center justify-between gap-4">
         <div>
           <h2 className="text-xl sm:text-2xl font-bold tracking-tight text-gray-900 dark:text-gray-100 flex items-center gap-2">
             <span>用户审核与权限管理</span>
@@ -136,7 +136,7 @@ export const AdminUsersView: React.FC<{ onRefreshCount?: () => void }> = ({ onRe
       </div>
 
       {/* Users Container */}
-      <div className="bg-white dark:bg-[#1e1f20] rounded-3xl border border-gray-200/80 dark:border-neutral-800/80 shadow-xs overflow-hidden transition-colors">
+      <div className="flex-1 min-h-0 bg-white dark:bg-[#1e1f20] rounded-3xl border border-gray-200/80 dark:border-neutral-800/80 shadow-xs overflow-y-auto transition-colors">
         {/* Desktop Table View */}
         <div className="hidden sm:block overflow-x-auto">
           <table className="w-full text-left text-xs">

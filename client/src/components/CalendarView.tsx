@@ -488,7 +488,7 @@ export const CalendarView: React.FC = () => {
   const restHeight = ((GRID_MINUTES - REST_START_MINUTES) / 60) * HOUR_HEIGHT;
 
   return (
-    <div className="w-full flex flex-col h-[calc(100vh-6.25rem)] min-h-[580px] space-y-3">
+    <div className="w-full flex-1 min-h-0 flex flex-col space-y-3 overflow-hidden">
       {/* Top Toolbar matching calcury/eisenhower-matrix */}
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 shrink-0 px-1">
         {/* Navigation Group */}

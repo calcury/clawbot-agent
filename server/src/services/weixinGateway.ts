@@ -242,6 +242,8 @@ export async function sendWeixinImageMessage(
     const rawsize = imageBuffer.length;
     const rawfilemd5 = crypto.createHash('md5').update(imageBuffer).digest('hex');
     const aeskey = crypto.randomBytes(16);
+    const aeskeyHex = aeskey.toString('hex');
+    const aeskeyBase64 = Buffer.from(aeskeyHex, 'utf-8').toString('base64');
     const ciphertext = encryptAes128Ecb(imageBuffer, aeskey);
     const filesize = ciphertext.length;
     const filekey = crypto.randomBytes(16).toString('hex');
@@ -321,7 +323,7 @@ export async function sendWeixinImageMessage(
             image_item: {
               media: {
                 encrypt_query_param: downloadParam,
-                aes_key: aeskey.toString('base64'),
+                aes_key: aeskeyBase64,
                 encrypt_type: 1,
               },
               mid_size: filesize,
@@ -531,7 +533,7 @@ export async function processWeChatMessage(
       }
 
       if (action === 'complete') {
-        db.prepare('UPDATE tasks SET status = "completed", updated_at = CURRENT_TIMESTAMP WHERE id = ?').run(activeTask.id);
+        db.prepare("UPDATE tasks SET status = 'completed', updated_at = CURRENT_TIMESTAMP WHERE id = ?").run(activeTask.id);
         const reply = templates.taskCompleted(activeTask.title);
         addDebugLog('Scheduler', 'success', `待办 #${activeTask.id} (${activeTask.title}) 标记为已完成`);
         return { replyText: reply, diagnostics: { intent: parsed.intent, parsed, action: 'completed' } };

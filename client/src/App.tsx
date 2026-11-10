@@ -45,15 +45,15 @@ const DashboardContent: React.FC = () => {
   }
 
   return (
-    <div className="min-h-screen bg-[#f8fafd] dark:bg-[#131314] flex flex-col text-gray-900 dark:text-gray-100 transition-colors">
+    <div className="h-screen overflow-hidden bg-[#f8fafd] dark:bg-[#131314] flex flex-col text-gray-900 dark:text-gray-100 transition-colors">
       <Navbar
         activeTab={activeTab}
         setActiveTab={setActiveTab}
         pendingUsersCount={pendingCount}
       />
 
-      {/* Main Container with spacious width and responsive padding */}
-      <main className="flex-1 w-full max-w-[1600px] mx-auto px-3 sm:px-6 lg:px-8 py-3 sm:py-5 pb-20 sm:pb-6">
+      {/* Main Container with full height and zero page scroll */}
+      <main className="flex-1 min-h-0 w-full max-w-[1700px] mx-auto px-2 sm:px-4 lg:px-6 py-2 sm:py-3.5 pb-16 sm:pb-3.5 overflow-hidden flex flex-col">
         {activeTab === 'todos' && <TodoList />}
         {activeTab === 'calendar' && <CalendarView />}
         {activeTab === 'settings' && <SettingsView />}
