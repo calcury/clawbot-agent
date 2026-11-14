@@ -103,7 +103,7 @@ export function getCalendarEvents(req: AuthenticatedRequest, res: Response): voi
   const tasks = db.prepare(`
     SELECT
       id, title, scheduled_start as start, scheduled_end as end,
-      duration_minutes, urgency, importance, status, deadline, notes
+      duration_minutes, urgency, importance, status, deadline, notes, schedule_blocks
     FROM tasks
     WHERE user_id = ?
       AND scheduled_start IS NOT NULL
@@ -129,30 +129,45 @@ export function getCalendarEvents(req: AuthenticatedRequest, res: Response): voi
         subscriptionName: ev.subscription_name || '外部日程',
       },
     })),
-    ...tasks.map(t => {
+    ...tasks.flatMap(t => {
       let color = '#3b82f6'; // default blue
       if (t.status === 'completed') color = '#10b981'; // emerald green
       else if (t.urgency >= 4) color = '#ef4444';      // red/urgent
       else if (t.importance >= 4) color = '#f59e0b';   // amber/important
 
-      return {
-        id: `task-${t.id}`,
-        title: `📌 ${t.title}`,
-        start: t.start,
-        end: t.end,
-        backgroundColor: color,
-        borderColor: color,
-        extendedProps: {
-          type: 'task',
-          taskId: t.id,
-          urgency: t.urgency,
-          importance: t.importance,
-          duration: t.duration_minutes,
-          status: t.status,
-          deadline: t.deadline,
-          notes: t.notes,
-        },
-      };
+      let blocks: any[] = [];
+      if (t.schedule_blocks) {
+        try {
+          blocks = JSON.parse(t.schedule_blocks);
+        } catch {}
+      }
+      if (!Array.isArray(blocks) || blocks.length === 0) {
+        blocks = [{ start: t.start, end: t.end }];
+      }
+
+      return blocks.map((block, bIdx) => {
+        const partSuffix = block.totalParts && block.totalParts > 1 ? ` (${block.partIndex || bIdx + 1}/${block.totalParts}节)` : '';
+        return {
+          id: `task-${t.id}-${bIdx}`,
+          title: `📌 ${t.title}${partSuffix}`,
+          start: block.start,
+          end: block.end,
+          backgroundColor: color,
+          borderColor: color,
+          extendedProps: {
+            type: 'task',
+            taskId: t.id,
+            urgency: t.urgency,
+            importance: t.importance,
+            duration: block.duration || t.duration_minutes,
+            status: t.status,
+            deadline: t.deadline,
+            notes: t.notes,
+            strategyLabel: block.strategyLabel,
+            energyZone: block.energyZone,
+          },
+        };
+      });
     }),
   ];
 

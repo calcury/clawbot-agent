@@ -72,6 +72,7 @@ export interface Task {
   deadline: string | null; // ISO
   scheduled_start: string | null; // ISO
   scheduled_end: string | null;   // ISO
+  schedule_blocks?: string | null; // JSON array of scheduled focus blocks
   status: 'pending_slot' | 'scheduled' | 'in_progress' | 'completed' | 'cancelled' | 'delayed';
   notes?: string | null;
   start_reminder_sent: number;

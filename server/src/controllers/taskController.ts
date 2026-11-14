@@ -2,7 +2,7 @@ import { Response } from 'express';
 import { db } from '../config/database.js';
 import { AuthenticatedRequest } from '../middleware/auth.js';
 import { Task } from '../models/types.js';
-import { scheduleTask } from '../services/scheduler.js';
+import { scheduleTask, replanUserTasks } from '../services/scheduler.js';
 
 export function listTasks(req: AuthenticatedRequest, res: Response): void {
   const userId = req.user!.id;
@@ -87,10 +87,14 @@ export function createTask(req: AuthenticatedRequest, res: Response): void {
     notes || null
   );
 
-  const newTask = db.prepare('SELECT * FROM tasks WHERE id = ?').get(result.lastInsertRowid);
+  const newId = result.lastInsertRowid;
+  if (auto_schedule) {
+    replanUserTasks(userId);
+  }
+  const newTask = db.prepare('SELECT * FROM tasks WHERE id = ?').get(newId);
 
   res.status(201).json({
-    message: scheduleMsg || '任务已创建',
+    message: scheduleMsg || '任务已创建并已智能排程入日历',
     task: newTask,
   });
 }
@@ -108,9 +112,10 @@ export function updateTask(req: AuthenticatedRequest, res: Response): void {
     scheduled_end,
     status,
     notes,
+    auto_schedule,
   } = req.body;
 
-  const existing = db.prepare('SELECT * FROM tasks WHERE id = ? AND user_id = ?').get(id, userId);
+  const existing = db.prepare('SELECT * FROM tasks WHERE id = ? AND user_id = ?').get(id, userId) as Task | undefined;
   if (!existing) {
     res.status(404).json({ error: '任务不存在' });
     return;
@@ -135,17 +140,21 @@ export function updateTask(req: AuthenticatedRequest, res: Response): void {
     duration_minutes,
     urgency,
     importance,
-    deadline !== undefined ? deadline : (existing as any).deadline,
-    scheduled_start !== undefined ? scheduled_start : (existing as any).scheduled_start,
-    scheduled_end !== undefined ? scheduled_end : (existing as any).scheduled_end,
+    deadline !== undefined ? deadline : existing.deadline,
+    scheduled_start !== undefined ? scheduled_start : existing.scheduled_start,
+    scheduled_end !== undefined ? scheduled_end : existing.scheduled_end,
     status,
-    notes !== undefined ? notes : (existing as any).notes,
+    notes !== undefined ? notes : existing.notes,
     id,
     userId
   );
 
+  if (auto_schedule || (auto_schedule === undefined && scheduled_start === undefined && (duration_minutes !== undefined || urgency !== undefined || importance !== undefined || deadline !== undefined))) {
+    replanUserTasks(userId);
+  }
+
   const updated = db.prepare('SELECT * FROM tasks WHERE id = ?').get(id);
-  res.json({ message: '任务更新成功', task: updated });
+  res.json({ message: '任务更新成功并已排程入日历', task: updated });
 }
 
 export function deleteTask(req: AuthenticatedRequest, res: Response): void {
@@ -153,7 +162,8 @@ export function deleteTask(req: AuthenticatedRequest, res: Response): void {
   const { id } = req.params;
 
   db.prepare('DELETE FROM tasks WHERE id = ? AND user_id = ?').run(id, userId);
-  res.json({ message: '任务已删除' });
+  replanUserTasks(userId);
+  res.json({ message: '任务已删除并自适应更新日历排程' });
 }
 
 export function rescheduleTask(req: AuthenticatedRequest, res: Response): void {
@@ -166,34 +176,14 @@ export function rescheduleTask(req: AuthenticatedRequest, res: Response): void {
     return;
   }
 
-  const plan = scheduleTask(userId, {
-    id: task.id,
-    title: task.title,
-    duration_minutes: task.duration_minutes,
-    urgency: task.urgency,
-    importance: task.importance,
-    deadline: task.deadline,
+  const replanRes = replanUserTasks(userId);
+  const updated = db.prepare('SELECT * FROM tasks WHERE id = ?').get(id) as Task;
+
+  res.json({
+    message: updated.scheduled_start ? '任务已完成自适应重新排程并同步至日历' : '排程失败，暂无合适空闲时段',
+    task: updated,
+    summary: replanRes.summary,
   });
-
-  if (!plan.success || !plan.scheduled_start || !plan.scheduled_end) {
-    res.status(400).json({ error: plan.message || '重排未找到合适的时间槽' });
-    return;
-  }
-
-  db.prepare(`
-    UPDATE tasks
-    SET
-      scheduled_start = ?,
-      scheduled_end = ?,
-      status = 'scheduled',
-      start_reminder_sent = 0,
-      end_reminder_sent = 0,
-      updated_at = CURRENT_TIMESTAMP
-    WHERE id = ?
-  `).run(plan.scheduled_start, plan.scheduled_end, id);
-
-  const updated = db.prepare('SELECT * FROM tasks WHERE id = ?').get(id);
-  res.json({ message: '任务已重新规划到最新合适时间槽！', task: updated });
 }
 
 export function quickActionTask(req: AuthenticatedRequest, res: Response): void {

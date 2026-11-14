@@ -120,6 +120,12 @@ export function initDatabase() {
   addCol('weixin_nickname', 'TEXT', "''");
   addCol('weixin_context_token', 'TEXT', "''");
 
+  // Migrate tasks table columns if missing
+  const taskCols = (db.prepare('PRAGMA table_info(tasks)').all() as any[]).map(c => c.name);
+  if (!taskCols.includes('schedule_blocks')) {
+    db.exec('ALTER TABLE tasks ADD COLUMN schedule_blocks TEXT DEFAULT NULL;');
+  }
+
   // Seed initial admin if database has no users
   const defaultAdminPassword = process.env.ADMIN_DEFAULT_PASSWORD || '86698111';
   const userCount = db.prepare('SELECT count(*) as count FROM users').get() as { count: number };

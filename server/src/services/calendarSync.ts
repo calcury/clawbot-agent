@@ -127,7 +127,7 @@ export async function syncAllUserSubscriptions(userId: number): Promise<{ totalE
 export function generateUserTodoIcal(userId: number, username: string): string {
   const cal = icalGenerator({
     name: `${username} 的 Clawbot 智能待办日历`,
-    description: '由 Clawbot 微信助手智能规划的专属于您的 TODO 日历',
+    description: '由 Clawbot 微信助手与 oxoxox 四象限算法智能规划的待办日历',
     timezone: 'Asia/Shanghai',
   });
 
@@ -144,28 +144,55 @@ export function generateUserTodoIcal(userId: number, username: string): string {
     const isCompleted = t.status === 'completed';
     const statusIcon = isCompleted ? '✅' : '📌';
 
-    const event = cal.createEvent({
-      id: `clawbot-task-${t.id}@clawbot.local`,
-      start: new Date(t.scheduled_start!),
-      end: new Date(t.scheduled_end!),
-      summary: `${statusIcon} ${t.title}`,
-      description: [
-        `【Clawbot 智能待办】`,
+    let blocks: {
+      start: string;
+      end: string;
+      duration?: number;
+      partIndex?: number;
+      totalParts?: number;
+      strategyLabel?: string;
+    }[] = [];
+
+    if (t.schedule_blocks) {
+      try {
+        blocks = typeof t.schedule_blocks === 'string' ? JSON.parse(t.schedule_blocks) : t.schedule_blocks;
+      } catch {}
+    }
+
+    if (blocks.length === 0 && t.scheduled_start && t.scheduled_end) {
+      blocks = [{ start: t.scheduled_start, end: t.scheduled_end }];
+    }
+
+    blocks.forEach((block, bIdx) => {
+      const partSuffix = block.totalParts && block.totalParts > 1 ? ` (${block.partIndex || bIdx + 1}/${block.totalParts}节)` : '';
+      const summary = `${statusIcon} ${t.title}${partSuffix}`;
+
+      const descLines = [
+        `【Clawbot × oxoxox 智能排程】`,
+        `待办事项：${t.title}`,
+        block.strategyLabel ? `排程策略：${block.strategyLabel}` : '',
         `任务状态：${isCompleted ? '已完成' : '待进行'}`,
         `预计耗时：${t.duration_minutes} 分钟`,
-        `紧急程度：${t.urgency} / 5`,
-        `重要程度：${t.importance} / 5`,
+        `紧急程度：${t.urgency} / 5  ·  重要程度：${t.importance} / 5`,
         t.deadline ? `截止时间：${new Date(t.deadline).toLocaleString('zh-CN', { timeZone: 'Asia/Shanghai' })}` : '',
         t.notes ? `备注：${t.notes}` : '',
-      ].filter(Boolean).join('\n'),
-      status: isCompleted ? ICalEventStatus.CONFIRMED : ICalEventStatus.TENTATIVE,
-    });
+      ].filter(Boolean);
 
-    // 5 minutes before alarm
-    event.createAlarm({
-      type: ICalAlarmType.display,
-      trigger: 300,
-      description: `【开始提醒】待办任务【${t.title}】即将开始！`,
+      const event = cal.createEvent({
+        id: `clawbot-task-${t.id}-${bIdx}@clawbot.local`,
+        start: new Date(block.start),
+        end: new Date(block.end),
+        summary,
+        description: descLines.join('\n'),
+        status: isCompleted ? ICalEventStatus.CONFIRMED : ICalEventStatus.TENTATIVE,
+      });
+
+      // 5 minutes before alarm
+      event.createAlarm({
+        type: ICalAlarmType.display,
+        trigger: 300,
+        description: `【开始提醒】待办任务【${t.title}】即将开始！`,
+      });
     });
   }
 

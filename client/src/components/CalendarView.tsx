@@ -81,6 +81,7 @@ interface TaskItem {
   deadline: string | null;
   scheduled_start: string | null;
   scheduled_end: string | null;
+  schedule_blocks?: string | null;
   status: string;
   notes: string | null;
 }
@@ -360,31 +361,46 @@ export const CalendarView: React.FC = () => {
           }
         });
 
-      // 2. Scheduled Tasks
+      // 2. Scheduled Tasks (with oxoxox focus blocks support)
       tasks
-        .filter((t) => t.scheduled_start && t.scheduled_end && t.status !== 'completed')
+        .filter((t) => (t.schedule_blocks || (t.scheduled_start && t.scheduled_end)) && t.status !== 'completed')
         .forEach((t) => {
-          const range = segmentRange(
-            t.scheduled_start!,
-            t.scheduled_end!,
-            windowStartIso,
-            windowEndIso
-          );
-          if (range) {
-            const quad = getTaskQuadrant(t.importance, t.urgency);
-            timedItems.push({
-              kind: 'task',
-              id: `task-${t.id}`,
-              title: t.title,
-              start: range.start,
-              end: range.end,
-              allDay: false,
-              color: quad.color,
-              qClass: quad.key,
-              qName: quad.name,
-              task: t,
-            });
+          let blocks: { start: string; end: string; partIndex?: number; totalParts?: number; strategyLabel?: string }[] = [];
+          if (t.schedule_blocks) {
+            try {
+              blocks = typeof t.schedule_blocks === 'string' ? JSON.parse(t.schedule_blocks) : t.schedule_blocks;
+            } catch {}
           }
+          if (!Array.isArray(blocks) || blocks.length === 0) {
+            if (t.scheduled_start && t.scheduled_end) {
+              blocks = [{ start: t.scheduled_start, end: t.scheduled_end }];
+            }
+          }
+
+          blocks.forEach((block, bIdx) => {
+            const range = segmentRange(
+              block.start,
+              block.end,
+              windowStartIso,
+              windowEndIso
+            );
+            if (range) {
+              const quad = getTaskQuadrant(t.importance, t.urgency);
+              const partSuffix = block.totalParts && block.totalParts > 1 ? ` (${block.partIndex || bIdx + 1}/${block.totalParts}节)` : '';
+              timedItems.push({
+                kind: 'task',
+                id: `task-${t.id}-${bIdx}`,
+                title: `${t.title}${partSuffix}`,
+                start: range.start,
+                end: range.end,
+                allDay: false,
+                color: quad.color,
+                qClass: quad.key,
+                qName: quad.name,
+                task: t,
+              });
+            }
+          });
         });
 
       // 3. Due tasks for this day
@@ -540,6 +556,15 @@ export const CalendarView: React.FC = () => {
           >
             <RefreshCw className={`w-3.5 h-3.5 ${replanLoading ? 'animate-spin' : ''}`} />
             <span>{replanLoading ? '排程计算中...' : '同步并自适应重排'}</span>
+          </button>
+
+          <button
+            onClick={copyIcal}
+            title="复制专属待办日历订阅链接 (可直接在系统日历中订阅)"
+            className="flex items-center gap-1.5 px-3.5 py-1.5 bg-white dark:bg-[#1e1f20] hover:bg-gray-100 dark:hover:bg-neutral-800 text-gray-700 dark:text-neutral-200 border border-gray-200/80 dark:border-neutral-700/80 rounded-full text-xs font-semibold shadow-2xs transition cursor-pointer"
+          >
+            {copiedIcal ? <Check className="w-3.5 h-3.5 text-emerald-600" /> : <Copy className="w-3.5 h-3.5 text-blue-600 dark:text-blue-400" />}
+            <span>{copiedIcal ? '订阅链接已复制' : '导出日历订阅'}</span>
           </button>
 
           <button
