@@ -248,13 +248,19 @@ export const EisenhowerWorkspace: React.FC<EisenhowerWorkspaceProps> = ({
   // 根据左侧分类及搜索框过滤任务列表
   const filteredTasks = useMemo(() => {
     return tasks.filter((task) => {
+      // 在四象限看板视图下，已完成的事项坚决不显示
+      if (currentView === 'matrix' && task.isCompleted) {
+        return false;
+      }
+
       if (activeCategory === 'completed') {
         if (!task.isCompleted) return false;
       } else if (activeCategory === 'all') {
-        // 在待办看板和列表中默认展示未完成，已完成事项归入已完成分类
-        // （但在四象限看板中，若搜索空则保留所有未完成）
+        // 在待办列表中若不是 completed 分类，默认展示未完成事项
+        if (currentView === 'list' && task.isCompleted) return false;
       } else if (activeCategory.startsWith('q')) {
         if (task.quadrant !== activeCategory) return false;
+        if (currentView === 'list' && task.isCompleted) return false;
       }
 
       if (searchQuery.trim()) {
@@ -265,7 +271,7 @@ export const EisenhowerWorkspace: React.FC<EisenhowerWorkspaceProps> = ({
       }
       return true;
     });
-  }, [tasks, activeCategory, searchQuery]);
+  }, [tasks, activeCategory, searchQuery, currentView]);
 
   // 点击直角坐标平面任意空白处，自动落位创建
   const handleCreateWithCoords = useCallback((importance: number, urgency: number) => {
@@ -856,6 +862,8 @@ export const EisenhowerWorkspace: React.FC<EisenhowerWorkspaceProps> = ({
           setClickCoords(null);
         }}
         onSave={handleSaveTask}
+        onToggleComplete={handleToggleComplete}
+        onDelete={handleDeleteTask}
         initialTask={editingTask}
         defaultImportance={clickCoords?.importance ?? 7}
         defaultUrgency={clickCoords?.urgency}

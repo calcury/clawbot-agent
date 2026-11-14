@@ -12,7 +12,9 @@ import {
   Tag as TagIcon, 
   ArrowRight,
   Plus,
-  Cpu
+  Cpu,
+  Check,
+  Trash2
 } from 'lucide-react';
 
 interface TaskModalProps {
@@ -28,6 +30,8 @@ interface TaskModalProps {
     tags?: string[];
     estimatedMinutes?: number;
   }) => void;
+  onToggleComplete?: (id: string) => void;
+  onDelete?: (id: string) => void;
   initialTask?: TaskItem | null;
   defaultImportance?: number;
   defaultUrgency?: number;
@@ -38,6 +42,8 @@ export const TaskModal: React.FC<TaskModalProps> = ({
   isOpen,
   onClose,
   onSave,
+  onToggleComplete,
+  onDelete,
   initialTask,
   defaultImportance = 7,
   defaultUrgency,
@@ -393,20 +399,59 @@ export const TaskModal: React.FC<TaskModalProps> = ({
           </div>
 
           {/* 底部操作按钮 */}
-          <div className="flex items-center justify-end gap-2.5 pt-3 border-t border-gray-100 dark:border-neutral-800">
-            <button
-              type="button"
-              onClick={onClose}
-              className="px-4 py-1.5 rounded-full text-xs font-medium text-gray-600 hover:bg-gray-100 dark:text-neutral-400 dark:hover:bg-neutral-800 transition-colors cursor-pointer"
-            >
-              取消
-            </button>
-            <button
-              type="submit"
-              className="px-5 py-1.5 rounded-full text-xs font-semibold text-white bg-blue-600 hover:bg-blue-700 shadow-xs transition-all cursor-pointer"
-            >
-              {initialTask ? '保存更新' : '确认创建并落位'}
-            </button>
+          <div className="flex items-center justify-between gap-2.5 pt-3 border-t border-gray-100 dark:border-neutral-800">
+            <div>
+              {initialTask && (
+                <div className="flex items-center gap-2">
+                  {onToggleComplete && (
+                    <button
+                      type="button"
+                      onClick={() => {
+                        onToggleComplete(initialTask.id);
+                        onClose();
+                      }}
+                      className={`px-3 py-1.5 rounded-full text-xs font-semibold flex items-center gap-1.5 transition cursor-pointer ${
+                        initialTask.isCompleted
+                          ? 'bg-amber-50 hover:bg-amber-100 text-amber-700 dark:bg-amber-950/50 dark:text-amber-300 border border-amber-200 dark:border-amber-800'
+                          : 'bg-emerald-50 hover:bg-emerald-100 text-emerald-700 dark:bg-emerald-950/50 dark:text-emerald-300 border border-emerald-200 dark:border-emerald-800'
+                      }`}
+                    >
+                      <Check className="w-3.5 h-3.5 stroke-[2.5]" />
+                      <span>{initialTask.isCompleted ? '重新标记为未完成' : '完成任务'}</span>
+                    </button>
+                  )}
+                  {onDelete && (
+                    <button
+                      type="button"
+                      onClick={() => {
+                        onDelete(initialTask.id);
+                        onClose();
+                      }}
+                      className="p-1.5 rounded-full text-gray-400 hover:text-rose-600 hover:bg-rose-50 dark:hover:bg-rose-950/40 transition cursor-pointer"
+                      title="删除此任务"
+                    >
+                      <Trash2 className="w-3.5 h-3.5" />
+                    </button>
+                  )}
+                </div>
+              )}
+            </div>
+
+            <div className="flex items-center gap-2">
+              <button
+                type="button"
+                onClick={onClose}
+                className="px-4 py-1.5 rounded-full text-xs font-medium text-gray-600 hover:bg-gray-100 dark:text-neutral-400 dark:hover:bg-neutral-800 transition-colors cursor-pointer"
+              >
+                取消
+              </button>
+              <button
+                type="submit"
+                className="px-5 py-1.5 rounded-full text-xs font-semibold text-white bg-blue-600 hover:bg-blue-700 shadow-xs transition-all cursor-pointer"
+              >
+                {initialTask ? '保存更新' : '确认创建并落位'}
+              </button>
+            </div>
           </div>
         </form>
       </div>
