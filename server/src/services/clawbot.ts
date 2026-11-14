@@ -21,20 +21,17 @@ export const templates = {
       list.push(`${idx++}️⃣ 预计耗时多少分钟？（如：45分钟、2小时）`);
     }
     if (missing.deadline) {
-      list.push(`${idx++}️⃣ 最晚何时前需要搞定（DDL）？（如：今天下午6点、明天中午12点）`);
-    }
-    if (missing.urgency) {
-      list.push(`${idx++}️⃣ 紧急程度？（1-5分，5为最加急）`);
+      list.push(`${idx++}️⃣ 最晚何时前需要搞定（截止日期 DDL）？（如：今天下午6点、明天、周五）`);
     }
     if (missing.importance) {
-      list.push(`${idx++}️⃣ 重要程度？（1-5分，5为最重要）`);
+      list.push(`${idx++}️⃣ 重要程度？（0-10分，5分为分界线，关键要事推荐 7-9分）`);
     }
 
     return (
       `📝【待办信息确认】\n` +
-      `已识别到新任务「${title}」，请回复补充以下信息以智能排入日历：\n\n` +
+      `已识别到新任务「${title}」，请回复补充以下信息以智能落位排程：\n\n` +
       list.join('\n') +
-      `\n\n💡 一句话回复全部即可，例如："耗时1小时，周五前完成，紧急4重要4"`
+      `\n\n💡 一句话回复全部即可，例如："耗时1小时，周五前完成，重要度8"`
     );
   },
 
@@ -49,14 +46,24 @@ export const templates = {
     urgency: number,
     importance: number
   ) => {
+    const qName =
+      importance >= 5
+        ? urgency >= 5
+          ? 'Q1 重要且紧急 (马上做)'
+          : 'Q2 重要不紧急 (计划做)'
+        : urgency >= 5
+        ? 'Q3 紧急不重要 (快速做)'
+        : 'Q4 不重要不紧急 (视情做)';
+
     return (
       `📅【日程已智能安排】\n` +
       `📌 任务：${title}\n` +
       `🕒 时间：${startStr} ~ ${endStr}\n` +
       `⏳ 耗时：${duration} 分钟\n` +
-      `⚡ 紧急度：${urgency}/5 | 重要度：${importance}/5\n` +
-      `✨ 已避开您的现有外部日程，安排在空闲工作时段内。\n` +
-      `已自动同步至您的专属 TODO 订阅日历！`
+      `🎯 象限：${qName}\n` +
+      `⚡ 分值：紧迫度 ${typeof urgency === 'number' ? urgency.toFixed(1) : urgency} | 重要度 ${typeof importance === 'number' ? importance.toFixed(1) : importance}\n` +
+      `✨ 已避开您的外部会议与生理用餐期，智能填补深度黄金专注段。\n` +
+      `已自动同步至日历日程视图！`
     );
   },
 

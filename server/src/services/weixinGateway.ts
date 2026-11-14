@@ -599,20 +599,39 @@ export async function processWeChatMessage(
       return { replyText: reply, diagnostics: { intent: parsed.intent, todayTasksCount: todayTasks.length } };
     } else if (parsed.intent === 'create_task') {
       const title = parsed.title || pendingTask?.title || '未命名任务';
-      const duration = parsed.duration_minutes || pendingTask?.duration_minutes || null;
-      const urgency = parsed.urgency || pendingTask?.urgency || null;
-      const importance = parsed.importance || pendingTask?.importance || null;
-      const deadline = parsed.deadline || pendingTask?.deadline || null;
+      const duration = parsed.duration_minutes || parsed.estimatedMinutes || pendingTask?.duration_minutes || pendingTask?.estimatedMinutes || null;
+      let importance = parsed.importance ?? pendingTask?.importance ?? 7.0; // 默认重要度 7.0
+      let deadline = parsed.deadline || pendingTask?.deadline || null;
+      const dueDate = parsed.dueDate || (deadline ? deadline.split('T')[0] : null) || pendingTask?.dueDate || null;
+      if (!deadline && dueDate) {
+        deadline = `${dueDate}T23:59:59`;
+      }
 
-      const merged = { title, duration_minutes: duration, urgency, importance, deadline };
+      // 根据 oxoxox-oxox 算法：如果有 deadline / dueDate，紧迫度可通过 calculateDynamicUrgency 自动推导
+      let urgency = parsed.urgency ?? pendingTask?.urgency ?? null;
+      if (deadline || dueDate) {
+        try {
+          const { calculateDynamicUrgency } = await import('../utils/priorityAlgorithm.js');
+          const dyn = calculateDynamicUrgency({
+            dueDate: dueDate || deadline,
+            estimatedMinutes: duration || 30,
+            fallbackUrgency: urgency ?? 5.0,
+          });
+          urgency = dyn.urgency;
+        } catch {
+          if (!urgency) urgency = 6.0;
+        }
+      }
+
+      const merged = { title, duration_minutes: duration, urgency, importance, deadline, dueDate };
       const missing = {
         duration: !duration || duration <= 0,
-        deadline: !deadline,
-        urgency: !urgency,
+        deadline: !deadline && !dueDate,
+        urgency: false, // 紧迫度依据截止期自动推导，不强制追问
         importance: !importance,
       };
 
-      const hasMissing = missing.duration || missing.deadline || missing.urgency || missing.importance;
+      const hasMissing = missing.duration || missing.deadline;
 
       if (hasMissing) {
         db.prepare(`

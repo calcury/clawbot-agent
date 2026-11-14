@@ -92,10 +92,14 @@ export interface ConversationState {
 export interface LLMExtractionResult {
   intent: 'create_task' | 'status_update' | 'query_schedule' | 'other';
   title?: string | null;
+  description?: string | null;
   duration_minutes?: number | null;
-  urgency?: number | null; // 1-5
-  importance?: number | null; // 1-5
-  deadline?: string | null; // ISO
+  urgency?: number | null; // 0.0 - 10.0
+  importance?: number | null; // 0.0 - 10.0
+  deadline?: string | null; // ISO 8601 string or YYYY-MM-DD
+  dueDate?: string | null; // 对齐 oxoxox-oxox: YYYY-MM-DD
+  estimatedMinutes?: number | null; // 对齐 oxoxox-oxox: 预计耗时分钟数
+  tags?: string[] | null; // 标签列表
   status_action?: 'complete' | 'extend' | 'reschedule' | 'cancel' | null;
   extend_minutes?: number | null;
   target_task_name?: string | null;
