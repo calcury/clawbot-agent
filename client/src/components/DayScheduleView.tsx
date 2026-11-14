@@ -199,15 +199,15 @@ export const DayScheduleView: React.FC<DayScheduleViewProps> = ({
   }, [effectiveStartHour, effectiveEndHour]);
 
   return (
-    <div className="flex flex-col h-full w-full bg-white dark:bg-slate-900 rounded-2xl border border-slate-200/90 dark:border-slate-800 shadow-xs overflow-hidden">
+    <div className="flex flex-col h-full w-full bg-white dark:bg-[#1e1f20] rounded-2xl border border-gray-200/80 dark:border-neutral-800/80 shadow-xs overflow-hidden">
       {/* 顶部工具栏与日期导航 */}
-      <div className="px-5 py-3.5 border-b border-slate-200 dark:border-slate-800 flex flex-wrap items-center justify-between gap-3 bg-slate-50/50 dark:bg-slate-900/50">
+      <div className="px-5 py-3.5 border-b border-gray-200 dark:border-neutral-800 flex flex-wrap items-center justify-between gap-3 bg-gray-50/50 dark:bg-[#1e1f20]/50">
         {/* 日期选择器 */}
         <div className="flex items-center gap-2">
           <button
             type="button"
             onClick={handlePrevDay}
-            className="p-1.5 rounded-lg border border-slate-200 bg-white hover:bg-slate-100 dark:border-slate-700 dark:bg-slate-800 dark:hover:bg-slate-700 text-slate-600 dark:text-slate-300 transition-colors"
+            className="p-1.5 rounded-lg border border-gray-200 bg-white hover:bg-gray-100 dark:border-neutral-700 dark:bg-[#28292a] dark:hover:bg-neutral-700 text-gray-600 dark:text-neutral-300 transition-colors"
             title="前一天"
           >
             <ChevronLeft className="h-4 w-4" />
@@ -215,22 +215,22 @@ export const DayScheduleView: React.FC<DayScheduleViewProps> = ({
           <button
             type="button"
             onClick={handleToday}
-            className="px-3 py-1.5 rounded-lg border border-slate-200 bg-white hover:bg-slate-100 dark:border-slate-700 dark:bg-slate-800 dark:hover:bg-slate-700 text-xs font-semibold text-slate-700 dark:text-slate-300 transition-colors"
+            className="px-3 py-1.5 rounded-lg border border-gray-200 bg-white hover:bg-gray-100 dark:border-neutral-700 dark:bg-[#28292a] dark:hover:bg-neutral-700 text-xs font-semibold text-gray-700 dark:text-neutral-300 transition-colors"
           >
             今天
           </button>
           <button
             type="button"
             onClick={handleNextDay}
-            className="p-1.5 rounded-lg border border-slate-200 bg-white hover:bg-slate-100 dark:border-slate-700 dark:bg-slate-800 dark:hover:bg-slate-700 text-slate-600 dark:text-slate-300 transition-colors"
+            className="p-1.5 rounded-lg border border-gray-200 bg-white hover:bg-gray-100 dark:border-neutral-700 dark:bg-[#28292a] dark:hover:bg-neutral-700 text-gray-600 dark:text-neutral-300 transition-colors"
             title="后一天"
           >
             <ChevronRight className="h-4 w-4" />
           </button>
 
           <div className="ml-2 flex items-center gap-2">
-            <Calendar className="h-4 w-4 text-indigo-600 dark:text-indigo-400" />
-            <span className="font-bold text-sm text-slate-900 dark:text-slate-100">
+            <Calendar className="h-4 w-4 text-blue-600 dark:text-blue-400" />
+            <span className="font-bold text-sm text-gray-900 dark:text-gray-100">
               {formattedDate}
             </span>
           </div>
@@ -261,10 +261,10 @@ export const DayScheduleView: React.FC<DayScheduleViewProps> = ({
               type="button"
               onClick={onSyncCalendar}
               disabled={isSyncing}
-              className="p-1.5 rounded-xl border border-slate-200 bg-white hover:bg-slate-100 dark:border-slate-700 dark:bg-slate-800 dark:hover:bg-slate-700 text-slate-600 dark:text-slate-300 disabled:opacity-40 transition-colors"
+              className="p-1.5 rounded-xl border border-gray-200 bg-white hover:bg-gray-100 dark:border-neutral-700 dark:bg-[#28292a] dark:hover:bg-neutral-700 text-gray-600 dark:text-neutral-300 disabled:opacity-40 transition-colors"
               title="拉取最新日历事件"
             >
-              <RefreshCw className={`h-4 w-4 ${isSyncing ? 'animate-spin text-indigo-600' : ''}`} />
+              <RefreshCw className={`h-4 w-4 ${isSyncing ? 'animate-spin text-blue-600' : ''}`} />
             </button>
           )}
 
@@ -274,8 +274,8 @@ export const DayScheduleView: React.FC<DayScheduleViewProps> = ({
             onClick={() => setAllowSplit(!allowSplit)}
             className={`inline-flex items-center gap-1 px-2.5 py-1.5 rounded-xl border text-xs font-medium transition-colors ${
               allowSplit
-                ? 'bg-indigo-50 border-indigo-200 text-indigo-700 dark:bg-indigo-950/40 dark:border-indigo-900 dark:text-indigo-300'
-                : 'bg-slate-100 border-slate-200 text-slate-600 dark:bg-slate-800 dark:border-slate-700 dark:text-slate-400'
+                ? 'bg-blue-50 border-blue-200 text-blue-700 dark:bg-blue-950/40 dark:border-blue-900 dark:text-blue-300'
+                : 'bg-gray-100 border-gray-200 text-gray-600 dark:bg-neutral-800 dark:border-neutral-700 dark:text-neutral-400'
             }`}
             title="当任务耗时大于空闲段时，是否允许自动切分成多段"
           >
@@ -622,13 +622,13 @@ export const DayScheduleView: React.FC<DayScheduleViewProps> = ({
       {/* 订阅链接配置弹窗 */}
       {isUrlModalOpen && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-xs">
-          <div className="w-full max-w-md rounded-2xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 shadow-2xl p-6 space-y-4 animate-in fade-in zoom-in-95 duration-150">
-            <h3 className="text-sm font-bold text-slate-900 dark:text-slate-100 flex items-center gap-2">
-              <Link2 className="h-4 w-4 text-indigo-600" />
+          <div className="w-full max-w-md rounded-2xl bg-white dark:bg-[#1e1f20] border border-gray-200 dark:border-neutral-800 shadow-2xl p-6 space-y-4 animate-in fade-in zoom-in-95 duration-150">
+            <h3 className="text-sm font-bold text-gray-900 dark:text-gray-100 flex items-center gap-2">
+              <Link2 className="h-4 w-4 text-blue-600 dark:text-blue-400" />
               <span>设置日历订阅链接 (WebCal / ICS)</span>
             </h3>
 
-            <p className="text-xs text-slate-500 dark:text-slate-400 leading-relaxed">
+            <p className="text-xs text-gray-500 dark:text-neutral-400 leading-relaxed">
               输入你的外部日历（Google Calendar、Outlook、Apple 日历、飞书/钉钉等）的公共或私有 <code>.ics</code> / <code>webcal://</code> 订阅链接。
             </p>
 
@@ -639,7 +639,7 @@ export const DayScheduleView: React.FC<DayScheduleViewProps> = ({
                 value={urlInput}
                 onChange={(e) => setUrlInput(e.target.value)}
                 placeholder="例如：webcal://p69-caldav.icloud.com/.../basic.ics 或 https://calendar.google.com/..."
-                className="w-full rounded-xl border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 p-2.5 text-xs text-slate-900 dark:text-slate-100 font-mono focus:border-indigo-500 focus:outline-none"
+                className="w-full rounded-xl border border-gray-300 dark:border-neutral-700 bg-white dark:bg-[#28292a] p-2.5 text-xs text-gray-900 dark:text-gray-100 font-mono focus:border-blue-500 focus:outline-none"
               />
 
               <div className="flex items-center justify-between pt-2">
@@ -651,7 +651,7 @@ export const DayScheduleView: React.FC<DayScheduleViewProps> = ({
                       setUrlInput('');
                       setIsUrlModalOpen(false);
                     }}
-                    className="text-xs text-rose-600 hover:underline"
+                    className="text-xs text-rose-600 hover:underline cursor-pointer"
                   >
                     解除当前订阅
                   </button>
@@ -660,13 +660,13 @@ export const DayScheduleView: React.FC<DayScheduleViewProps> = ({
                   <button
                     type="button"
                     onClick={() => setIsUrlModalOpen(false)}
-                    className="px-4 py-1.5 rounded-xl text-xs font-semibold text-slate-600 hover:bg-slate-100 dark:text-slate-400 dark:hover:bg-slate-800"
+                    className="px-4 py-1.5 rounded-full text-xs font-semibold text-gray-600 hover:bg-gray-100 dark:text-neutral-400 dark:hover:bg-neutral-800 cursor-pointer"
                   >
                     取消
                   </button>
                   <button
                     type="submit"
-                    className="px-5 py-1.5 rounded-xl text-xs font-semibold text-white bg-indigo-600 hover:bg-indigo-700 shadow-xs"
+                    className="px-5 py-1.5 rounded-full text-xs font-semibold text-white bg-blue-600 hover:bg-blue-700 shadow-xs cursor-pointer"
                   >
                     保存并立即拉取
                   </button>

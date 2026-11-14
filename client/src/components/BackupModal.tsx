@@ -114,30 +114,30 @@ export const BackupModal: React.FC<BackupModalProps> = ({
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-xs">
-      <div className="w-full max-w-lg rounded-2xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 shadow-2xl overflow-hidden transition-all animate-in fade-in zoom-in-95 duration-150">
+      <div className="w-full max-w-lg rounded-2xl bg-white dark:bg-[#1e1f20] border border-gray-200 dark:border-neutral-800 shadow-2xl overflow-hidden transition-all animate-in fade-in zoom-in-95 duration-150">
         {/* 头部 */}
-        <div className="flex items-center justify-between px-6 py-4 border-b border-slate-100 dark:border-slate-800">
-          <h2 className="text-base font-bold text-slate-900 dark:text-slate-100">
+        <div className="flex items-center justify-between px-6 py-4 border-b border-gray-100 dark:border-neutral-800">
+          <h2 className="text-base font-bold text-gray-900 dark:text-gray-100">
             数据备份、导入与导出
           </h2>
           <button
             type="button"
             onClick={onClose}
-            className="rounded-lg p-1.5 text-slate-400 hover:bg-slate-100 hover:text-slate-600 dark:hover:bg-slate-800 dark:hover:text-slate-300"
+            className="rounded-full p-1.5 text-gray-400 hover:bg-gray-100 hover:text-gray-600 dark:hover:bg-neutral-800 dark:hover:text-neutral-300 transition cursor-pointer"
           >
             <X className="h-5 w-5" />
           </button>
         </div>
 
         {/* 标签栏 */}
-        <div className="flex border-b border-slate-100 dark:border-slate-800 px-6 pt-2">
+        <div className="flex border-b border-gray-100 dark:border-neutral-800 px-6 pt-2">
           <button
             type="button"
             onClick={() => setActiveTab('export')}
-            className={`pb-3 text-xs font-semibold border-b-2 mr-6 transition-all ${
+            className={`pb-3 text-xs font-semibold border-b-2 mr-6 transition-all cursor-pointer ${
               activeTab === 'export'
-                ? 'border-indigo-600 text-indigo-600 dark:text-indigo-400'
-                : 'border-transparent text-slate-500 hover:text-slate-800 dark:text-slate-400 dark:hover:text-slate-200'
+                ? 'border-blue-600 text-blue-600 dark:text-blue-400'
+                : 'border-transparent text-gray-500 hover:text-gray-800 dark:text-neutral-400 dark:hover:text-neutral-200'
             }`}
           >
             导出与分享
@@ -145,10 +145,10 @@ export const BackupModal: React.FC<BackupModalProps> = ({
           <button
             type="button"
             onClick={() => setActiveTab('import')}
-            className={`pb-3 text-xs font-semibold border-b-2 transition-all ${
+            className={`pb-3 text-xs font-semibold border-b-2 transition-all cursor-pointer ${
               activeTab === 'import'
-                ? 'border-indigo-600 text-indigo-600 dark:text-indigo-400'
-                : 'border-transparent text-slate-500 hover:text-slate-800 dark:text-slate-400 dark:hover:text-slate-200'
+                ? 'border-blue-600 text-blue-600 dark:text-blue-400'
+                : 'border-transparent text-gray-500 hover:text-gray-800 dark:text-neutral-400 dark:hover:text-neutral-200'
             }`}
           >
             导入与恢复
@@ -158,11 +158,11 @@ export const BackupModal: React.FC<BackupModalProps> = ({
         <div className="p-6">
           {activeTab === 'export' ? (
             <div className="space-y-4">
-              <div className="p-4 rounded-xl border border-slate-200 dark:border-slate-800 bg-slate-50/50 dark:bg-slate-800/40">
+              <div className="p-4 rounded-xl border border-gray-200 dark:border-neutral-800 bg-gray-50/50 dark:bg-neutral-800/40">
                 <div className="flex items-center justify-between">
                   <div className="flex items-center gap-2">
-                    <Download className="h-4 w-4 text-indigo-600 dark:text-indigo-400" />
-                    <span className="text-xs font-bold text-slate-900 dark:text-slate-100">
+                    <Download className="h-4 w-4 text-blue-600 dark:text-blue-400" />
+                    <span className="text-xs font-bold text-gray-900 dark:text-gray-100">
                       导出为完整 JSON 备份文件
                     </span>
                   </div>
@@ -170,7 +170,7 @@ export const BackupModal: React.FC<BackupModalProps> = ({
                     <button
                       type="button"
                       onClick={() => handleCopy(JSON.stringify(tasks, null, 2), 'json')}
-                      className="px-3 py-1.5 rounded-lg border border-slate-200 text-xs text-slate-700 hover:bg-slate-100 dark:border-slate-700 dark:text-slate-300 dark:hover:bg-slate-800 inline-flex items-center gap-1"
+                      className="px-3 py-1.5 rounded-full border border-gray-200 text-xs text-gray-700 hover:bg-gray-100 dark:border-neutral-700 dark:text-neutral-300 dark:hover:bg-neutral-800 inline-flex items-center gap-1 cursor-pointer"
                     >
                       {copiedType === 'json' ? <Check className="h-3.5 w-3.5 text-emerald-600" /> : <Copy className="h-3.5 w-3.5" />}
                       <span>{copiedType === 'json' ? '已复制' : '复制 JSON'}</span>
@@ -178,7 +178,7 @@ export const BackupModal: React.FC<BackupModalProps> = ({
                     <button
                       type="button"
                       onClick={handleDownloadJson}
-                      className="px-3 py-1.5 rounded-lg bg-indigo-600 text-xs font-semibold text-white hover:bg-indigo-700 inline-flex items-center gap-1"
+                      className="px-3.5 py-1.5 rounded-full bg-blue-600 text-xs font-semibold text-white hover:bg-blue-700 inline-flex items-center gap-1 cursor-pointer"
                     >
                       <Download className="h-3.5 w-3.5" /> 下载文件
                     </button>
@@ -186,15 +186,15 @@ export const BackupModal: React.FC<BackupModalProps> = ({
                 </div>
               </div>
 
-              <div className="p-4 rounded-xl border border-slate-200 dark:border-slate-800 bg-slate-50/50 dark:bg-slate-800/40">
+              <div className="p-4 rounded-xl border border-gray-200 dark:border-neutral-800 bg-gray-50/50 dark:bg-neutral-800/40">
                 <div className="flex items-center justify-between">
                   <div className="flex items-center gap-2">
                     <FileText className="h-4 w-4 text-emerald-600 dark:text-emerald-400" />
                     <div>
-                      <span className="text-xs font-bold text-slate-900 dark:text-slate-100">
+                      <span className="text-xs font-bold text-gray-900 dark:text-gray-100">
                         导出为 Markdown 清单
                       </span>
-                      <p className="text-[11px] text-slate-500 dark:text-slate-400">
+                      <p className="text-[11px] text-gray-500 dark:text-neutral-400">
                         适合粘贴至周报、Notion 或个人笔记软件
                       </p>
                     </div>
@@ -202,24 +202,35 @@ export const BackupModal: React.FC<BackupModalProps> = ({
                   <button
                     type="button"
                     onClick={() => handleCopy(generateMarkdown(), 'markdown')}
-                    className="px-3 py-1.5 rounded-lg border border-slate-200 text-xs text-slate-700 hover:bg-slate-100 dark:border-slate-700 dark:text-slate-300 dark:hover:bg-slate-800 inline-flex items-center gap-1"
+                    className="px-3.5 py-1.5 rounded-full border border-gray-200 text-xs text-gray-700 hover:bg-gray-100 dark:border-neutral-700 dark:text-neutral-300 dark:hover:bg-neutral-800 inline-flex items-center gap-1 cursor-pointer"
                   >
                     {copiedType === 'markdown' ? <Check className="h-3.5 w-3.5 text-emerald-600" /> : <Copy className="h-3.5 w-3.5" />}
                     <span>{copiedType === 'markdown' ? '已复制' : '复制 Markdown'}</span>
                   </button>
                 </div>
               </div>
+
+              <div className="pt-2 flex items-center justify-between">
+                <span className="text-xs text-gray-400 dark:text-neutral-500">
+                  当前待办总数：{tasks.length} 项
+                </span>
+                <button
+                  type="button"
+                  onClick={onClearAll}
+                  className="text-xs text-rose-600 hover:text-rose-700 dark:text-rose-400 inline-flex items-center gap-1 cursor-pointer"
+                >
+                  <RotateCcw className="h-3.5 w-3.5" />
+                  <span>清空所有待办</span>
+                </button>
+              </div>
             </div>
           ) : (
             <div className="space-y-4">
               <div>
-                <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1">
-                  方式一：选择本地 JSON 备份文件直接读取
-                </label>
-                <label className="flex flex-col items-center justify-center p-4 border-2 border-dashed border-slate-200 dark:border-slate-700 rounded-xl cursor-pointer hover:border-indigo-500 hover:bg-slate-50 dark:hover:bg-slate-800/50 transition-colors">
-                  <Upload className="h-6 w-6 text-slate-400 mb-1" />
-                  <span className="text-xs font-medium text-slate-600 dark:text-slate-300">
-                    点击选择 .json 格式备份文件
+                <label className="flex flex-col items-center justify-center p-4 border-2 border-dashed border-gray-200 dark:border-neutral-700 rounded-xl cursor-pointer hover:border-blue-500 hover:bg-gray-50 dark:hover:bg-neutral-800/50 transition-colors">
+                  <Upload className="h-6 w-6 text-gray-400 mb-1" />
+                  <span className="text-xs font-medium text-gray-700 dark:text-neutral-300">
+                    点击上传 JSON 备份文件
                   </span>
                   <input
                     type="file"
@@ -231,45 +242,32 @@ export const BackupModal: React.FC<BackupModalProps> = ({
               </div>
 
               <div>
-                <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1">
-                  方式二：粘贴 JSON 文本导入
+                <label className="block text-xs font-semibold text-gray-700 dark:text-neutral-300 mb-1">
+                  或直接粘贴 JSON 文本
                 </label>
                 <textarea
                   rows={4}
                   value={importJsonText}
                   onChange={(e) => setImportJsonText(e.target.value)}
-                  placeholder="在此处粘贴此前导出的 JSON 任务数据..."
-                  className="w-full rounded-xl border border-slate-300 bg-white p-3 text-xs text-slate-900 focus:border-indigo-500 focus:outline-none dark:border-slate-700 dark:bg-slate-800 dark:text-slate-100 font-mono"
+                  placeholder='[ { "title": "任务名称", "importance": 8, "urgency": 7 } ]'
+                  className="w-full rounded-xl border border-gray-300 bg-white p-3 text-xs text-gray-900 focus:border-blue-500 focus:outline-none dark:border-neutral-700 dark:bg-[#28292a] dark:text-gray-100 font-mono"
                 />
               </div>
 
               {importError && (
-                <div className="text-xs text-rose-600 dark:text-rose-400">
+                <div className="text-xs text-rose-600 bg-rose-50 dark:bg-rose-950/40 p-2.5 rounded-lg border border-rose-200 dark:border-rose-900">
                   {importError}
                 </div>
               )}
 
-              <div className="flex items-center justify-between pt-2">
-                <button
-                  type="button"
-                  onClick={() => {
-                    if (confirm('确定要清空当前所有任务吗？此操作无法撤销。')) {
-                      onClearAll();
-                      onClose();
-                    }
-                  }}
-                  className="inline-flex items-center gap-1 text-xs text-slate-500 hover:text-rose-600 dark:hover:text-rose-400"
-                >
-                  <RotateCcw className="h-3.5 w-3.5" /> 清空全部任务
-                </button>
-
+              <div className="flex justify-end pt-2">
                 <button
                   type="button"
                   onClick={handleImportSubmit}
                   disabled={!importJsonText.trim()}
-                  className="px-4 py-2 rounded-xl text-xs font-semibold text-white bg-indigo-600 hover:bg-indigo-700 disabled:opacity-40"
+                  className="px-4 py-2 rounded-full text-xs font-semibold text-white bg-blue-600 hover:bg-blue-700 disabled:opacity-40 cursor-pointer"
                 >
-                  确认导入
+                  解析并恢复数据
                 </button>
               </div>
             </div>

@@ -74,21 +74,21 @@ export const StatsModal: React.FC<StatsModalProps> = ({
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-xs">
-      <div className="w-full max-w-xl rounded-2xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 shadow-2xl overflow-hidden transition-all animate-in fade-in zoom-in-95 duration-150">
+      <div className="w-full max-w-xl rounded-2xl bg-white dark:bg-[#1e1f20] border border-gray-200 dark:border-neutral-800 shadow-2xl overflow-hidden transition-all animate-in fade-in zoom-in-95 duration-150">
         {/* 头部 */}
-        <div className="flex items-center justify-between px-6 py-4 border-b border-slate-100 dark:border-slate-800">
+        <div className="flex items-center justify-between px-6 py-4 border-b border-gray-100 dark:border-neutral-800">
           <div className="flex items-center gap-2">
-            <span className="p-1.5 rounded-lg bg-indigo-50 text-indigo-600 dark:bg-indigo-950/60 dark:text-indigo-400">
+            <span className="p-1.5 rounded-lg bg-blue-50 text-blue-600 dark:bg-blue-950/60 dark:text-blue-400">
               <PieChart className="h-5 w-5" />
             </span>
-            <h2 className="text-base font-bold text-slate-900 dark:text-slate-100">
+            <h2 className="text-base font-bold text-gray-900 dark:text-gray-100">
               四象限精力与效能复盘
             </h2>
           </div>
           <button
             type="button"
             onClick={onClose}
-            className="rounded-lg p-1.5 text-slate-400 hover:bg-slate-100 hover:text-slate-600 dark:hover:bg-slate-800 dark:hover:text-slate-300"
+            className="rounded-full p-1.5 text-gray-400 hover:bg-gray-100 hover:text-gray-600 dark:hover:bg-neutral-800 dark:hover:text-neutral-300 transition cursor-pointer"
           >
             <X className="h-5 w-5" />
           </button>
@@ -98,9 +98,9 @@ export const StatsModal: React.FC<StatsModalProps> = ({
         <div className="p-6 space-y-6 max-h-[80vh] overflow-y-auto">
           {/* 数据总览卡片 */}
           <div className="grid grid-cols-3 gap-3">
-            <div className="p-3.5 rounded-xl bg-slate-50 border border-slate-200/80 dark:bg-slate-800/40 dark:border-slate-800 text-center">
-              <div className="text-[11px] font-medium text-slate-500 dark:text-slate-400">事项总计</div>
-              <div className="text-2xl font-black text-slate-900 dark:text-slate-100 mt-1">
+            <div className="p-3.5 rounded-xl bg-gray-50 border border-gray-200/80 dark:bg-neutral-800/40 dark:border-neutral-800 text-center">
+              <div className="text-[11px] font-medium text-gray-500 dark:text-neutral-400">事项总计</div>
+              <div className="text-2xl font-black text-gray-900 dark:text-gray-100 mt-1">
                 {stats.total}
               </div>
             </div>
@@ -110,9 +110,9 @@ export const StatsModal: React.FC<StatsModalProps> = ({
                 {stats.pending}
               </div>
             </div>
-            <div className="p-3.5 rounded-xl bg-emerald-50/50 border border-emerald-200/60 dark:bg-emerald-950/20 dark:border-emerald-900/40 text-center">
-              <div className="text-[11px] font-medium text-emerald-700 dark:text-emerald-400">已完成</div>
-              <div className="text-2xl font-black text-emerald-700 dark:text-emerald-300 mt-1">
+            <div className="p-3.5 rounded-xl bg-blue-50/50 border border-blue-200/60 dark:bg-blue-950/20 dark:border-blue-900/40 text-center">
+              <div className="text-[11px] font-medium text-blue-700 dark:text-blue-400">已完成</div>
+              <div className="text-2xl font-black text-blue-700 dark:text-blue-300 mt-1">
                 {stats.completed}
               </div>
             </div>
@@ -121,10 +121,10 @@ export const StatsModal: React.FC<StatsModalProps> = ({
           {/* 四象限分布进度条 */}
           <div className="space-y-4">
             <div className="flex items-center justify-between">
-              <span className="text-xs font-bold text-slate-800 dark:text-slate-200 uppercase tracking-wider">
+              <span className="text-xs font-bold text-gray-800 dark:text-neutral-200 uppercase tracking-wider">
                 各象限精力投入占比
               </span>
-              <span className="text-xs text-slate-500 dark:text-slate-400">
+              <span className="text-xs text-gray-500 dark:text-neutral-400">
                 完成率：{stats.completionRate}%
               </span>
             </div>
@@ -137,15 +137,15 @@ export const StatsModal: React.FC<StatsModalProps> = ({
                   <div className="flex items-center justify-between text-xs">
                     <div className="flex items-center gap-1.5 font-medium">
                       <span className={`h-2.5 w-2.5 rounded-full ${meta.themeColor.accentDot}`} />
-                      <span className="text-slate-800 dark:text-slate-200">{meta.name}</span>
-                      <span className="text-[11px] text-slate-400">({meta.shortAction})</span>
+                      <span className="text-gray-800 dark:text-neutral-200">{meta.name}</span>
+                      <span className="text-[11px] text-gray-400">({meta.shortAction})</span>
                     </div>
-                    <div className="font-semibold text-slate-700 dark:text-slate-300">
+                    <div className="font-semibold text-gray-700 dark:text-neutral-300">
                       {qStats.total} 项 · {qStats.percent}%
                     </div>
                   </div>
 
-                  <div className="h-2.5 w-full rounded-full bg-slate-100 dark:bg-slate-800 overflow-hidden flex">
+                  <div className="h-2 w-full rounded-full bg-gray-100 dark:bg-neutral-800 overflow-hidden flex">
                     <div
                       className={`h-full ${meta.themeColor.accentDot} transition-all duration-500`}
                       style={{ width: `${qStats.percent}%` }}
@@ -157,23 +157,23 @@ export const StatsModal: React.FC<StatsModalProps> = ({
           </div>
 
           {/* 效能诊断建议 */}
-          <div className="p-4 rounded-xl bg-indigo-50/70 border border-indigo-200/80 dark:bg-indigo-950/30 dark:border-indigo-900/50 space-y-1.5">
-            <div className="flex items-center gap-1.5 text-xs font-bold text-indigo-900 dark:text-indigo-300">
+          <div className="p-4 rounded-xl bg-blue-50/70 border border-blue-200/80 dark:bg-blue-950/30 dark:border-blue-900/50 space-y-1.5">
+            <div className="flex items-center gap-1.5 text-xs font-bold text-blue-900 dark:text-blue-300">
               <TrendingUp className="h-4 w-4" />
               <span>{advice.title}</span>
             </div>
-            <p className="text-xs text-indigo-800/90 dark:text-indigo-300/90 leading-relaxed">
+            <p className="text-xs text-blue-800/90 dark:text-blue-300/90 leading-relaxed">
               {advice.content}
             </p>
           </div>
         </div>
 
         {/* 底部 */}
-        <div className="px-6 py-4 border-t border-slate-100 dark:border-slate-800 bg-slate-50/50 dark:bg-slate-900/50 flex justify-end">
+        <div className="px-6 py-4 border-t border-gray-100 dark:border-neutral-800 bg-gray-50/50 dark:bg-[#1e1f20]/50 flex justify-end">
           <button
             type="button"
             onClick={onClose}
-            className="px-5 py-2 rounded-xl text-xs font-semibold text-slate-700 hover:bg-slate-200 dark:text-slate-300 dark:hover:bg-slate-800 transition-colors"
+            className="px-5 py-1.5 rounded-full text-xs font-semibold text-gray-700 hover:bg-gray-200 dark:text-neutral-300 dark:hover:bg-neutral-800 transition-colors cursor-pointer"
           >
             关闭
           </button>
