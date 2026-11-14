@@ -173,7 +173,7 @@ export const TaskModal: React.FC<TaskModalProps> = ({
               value={title}
               onChange={(e) => setTitle(e.target.value)}
               placeholder="输入事项名称..."
-              className="w-full rounded-xl border border-gray-200 bg-gray-50/50 px-3.5 py-2 text-xs text-gray-900 focus:bg-white focus:border-blue-500 focus:ring-2 focus:ring-blue-500/20 focus:outline-none dark:border-neutral-700 dark:bg-[#28292a] dark:text-gray-100 placeholder:text-gray-400 transition"
+              className="w-full rounded-xl border border-gray-200 bg-gray-50/50 px-3.5 py-2 text-xs text-gray-900 focus:bg-white dark:focus:bg-[#28292a] focus:border-blue-500 focus:ring-2 focus:ring-blue-500/20 focus:outline-none dark:border-neutral-700 dark:bg-[#28292a] dark:text-gray-100 placeholder:text-gray-400 transition"
             />
           </div>
 
@@ -191,7 +191,7 @@ export const TaskModal: React.FC<TaskModalProps> = ({
                   required
                   value={dueDate}
                   onChange={(e) => setDueDate(e.target.value)}
-                  className="w-full rounded-xl border border-gray-200 bg-gray-50/50 px-3 py-2 text-xs text-gray-900 focus:bg-white focus:border-blue-500 focus:outline-none dark:border-neutral-700 dark:bg-[#28292a] dark:text-gray-100 transition"
+                  className="w-full rounded-xl border border-gray-200 bg-gray-50/50 px-3 py-2 text-xs text-gray-900 focus:bg-white dark:focus:bg-[#28292a] focus:border-blue-500 focus:outline-none dark:border-neutral-700 dark:bg-[#28292a] dark:text-gray-100 transition"
                 />
               </div>
 
@@ -208,7 +208,7 @@ export const TaskModal: React.FC<TaskModalProps> = ({
                     value={estimatedMinutes}
                     onChange={(e) => setEstimatedMinutes(e.target.value ? Number(e.target.value) : '')}
                     placeholder="30"
-                    className="w-full rounded-xl border border-gray-200 bg-gray-50/50 px-3 py-2 text-xs text-gray-900 focus:bg-white focus:border-blue-500 focus:outline-none dark:border-neutral-700 dark:bg-[#28292a] dark:text-gray-100 transition pr-10"
+                    className="w-full rounded-xl border border-gray-200 bg-gray-50/50 px-3 py-2 text-xs text-gray-900 focus:bg-white dark:focus:bg-[#28292a] focus:border-blue-500 focus:outline-none dark:border-neutral-700 dark:bg-[#28292a] dark:text-gray-100 transition pr-10"
                   />
                   <span className="absolute right-3 top-1/2 -translate-y-1/2 text-xs text-gray-400">分钟</span>
                 </div>
@@ -293,7 +293,7 @@ export const TaskModal: React.FC<TaskModalProps> = ({
               value={description}
               onChange={(e) => setDescription(e.target.value)}
               placeholder="添加备注细节..."
-              className="w-full rounded-xl border border-gray-200 bg-gray-50/50 p-2.5 text-xs text-gray-900 focus:bg-white focus:border-blue-500 focus:outline-none dark:border-neutral-700 dark:bg-[#28292a] dark:text-gray-100 placeholder:text-gray-400 transition"
+              className="w-full rounded-xl border border-gray-200 bg-gray-50/50 p-2.5 text-xs text-gray-900 focus:bg-white dark:focus:bg-[#28292a] focus:border-blue-500 focus:outline-none dark:border-neutral-700 dark:bg-[#28292a] dark:text-gray-100 placeholder:text-gray-400 transition"
             />
           </div>
 
@@ -315,7 +315,7 @@ export const TaskModal: React.FC<TaskModalProps> = ({
                   }
                 }}
                 placeholder="输入标签并回车..."
-                className="flex-1 rounded-xl border border-gray-200 bg-gray-50/50 px-3 py-1.5 text-xs text-gray-900 focus:bg-white focus:border-blue-500 focus:outline-none dark:border-neutral-700 dark:bg-[#28292a] dark:text-gray-100 transition"
+                className="flex-1 rounded-xl border border-gray-200 bg-gray-50/50 px-3 py-1.5 text-xs text-gray-900 focus:bg-white dark:focus:bg-[#28292a] focus:border-blue-500 focus:outline-none dark:border-neutral-700 dark:bg-[#28292a] dark:text-gray-100 transition"
               />
               <button
                 type="button"
