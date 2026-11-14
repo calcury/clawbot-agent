@@ -4,6 +4,7 @@ import { ThemeProvider } from './context/ThemeContext';
 import { AuthPage } from './pages/AuthPage';
 import { Navbar } from './components/Navbar';
 import { EisenhowerWorkspace } from './components/EisenhowerWorkspace';
+import { CalendarView } from './components/CalendarView';
 import { SettingsView } from './components/SettingsView';
 import { AdminUsersView } from './components/AdminUsersView';
 import { SystemDebugger } from './components/SystemDebugger';
@@ -65,12 +66,13 @@ const DashboardContent: React.FC = () => {
 
       {/* Main Container with full height and zero page scroll */}
       <main className="flex-1 min-h-0 w-full max-w-[1700px] mx-auto px-2 sm:px-4 lg:px-6 py-2 sm:py-3.5 pb-16 sm:pb-3.5 overflow-hidden flex flex-col">
-        {(activeTab === 'todos' || activeTab === 'calendar') && (
+        {activeTab === 'todos' && (
           <EisenhowerWorkspace
-            activeView={activeTab === 'calendar' ? 'calendar' : 'matrix'}
+            activeView="matrix"
             onSelectView={(view) => setActiveTab(view === 'calendar' ? 'calendar' : 'todos')}
           />
         )}
+        {activeTab === 'calendar' && <CalendarView />}
         {activeTab === 'settings' && <SettingsView />}
         {activeTab === 'admin' && user.role === 'admin' && (
           <AdminUsersView onRefreshCount={fetchPendingCount} />

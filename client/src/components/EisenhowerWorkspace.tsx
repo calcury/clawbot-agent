@@ -1,11 +1,10 @@
 import React, { useState, useEffect, useMemo, useCallback } from 'react';
 import type { TaskItem, QuadrantId } from '../types/task';
-import type { CalendarEvent } from '../types/calendar';
 import { calculateQuadrant, formatLocalDate } from '../types/task';
 import { calculateDynamicUrgency } from '../utils/priorityAlgorithm';
 import { api } from '../api/client';
 import { MatrixBoard } from './MatrixBoard';
-import { DayScheduleView } from './DayScheduleView';
+import { CalendarView } from './CalendarView';
 import { TaskModal } from './TaskModal';
 import { WizardModal } from './WizardModal';
 import { StatsModal } from './StatsModal';
@@ -67,11 +66,7 @@ export const EisenhowerWorkspace: React.FC<EisenhowerWorkspaceProps> = ({
 
   // 任务数据与加载状态
   const [tasks, setTasks] = useState<TaskItem[]>([]);
-  const [fixedEvents, setFixedEvents] = useState<CalendarEvent[]>([]);
-  const [subscriptionUrl, setSubscriptionUrl] = useState<string>('');
   const [loading, setLoading] = useState(true);
-  const [isSyncing, setIsSyncing] = useState(false);
-  const [syncError, setSyncError] = useState<string | null>(null);
 
   // 分类筛选与搜索 (模仿旧版 TodoList)
   const [activeCategory, setActiveCategory] = useState<string>('all');
@@ -154,39 +149,9 @@ export const EisenhowerWorkspace: React.FC<EisenhowerWorkspaceProps> = ({
     }
   }, [mapServerTask]);
 
-  // 拉取外部日历事件与订阅配置
-  const fetchCalendarData = useCallback(async () => {
-    try {
-      const [eventsRes, subsRes] = await Promise.all([
-        api.get('/calendar/events'),
-        api.get('/calendar/subscriptions'),
-      ]);
-
-      const rawEvents = eventsRes.data.events || [];
-      const parsedEvents: CalendarEvent[] = rawEvents.map((e: any) => ({
-        id: String(e.id),
-        title: e.title,
-        start: new Date(e.start),
-        end: new Date(e.end),
-        description: e.extendedProps?.notes || '',
-        location: e.extendedProps?.location || '',
-        isAllDay: !!e.allDay,
-      }));
-      setFixedEvents(parsedEvents);
-
-      const subs = subsRes.data.subscriptions || [];
-      if (subs.length > 0 && subs[0].url) {
-        setSubscriptionUrl(subs[0].url);
-      }
-    } catch (err) {
-      console.error('拉取日历数据失败:', err);
-    }
-  }, []);
-
   useEffect(() => {
     fetchTasks();
-    fetchCalendarData();
-  }, [fetchTasks, fetchCalendarData]);
+  }, [fetchTasks]);
 
   // 全局键盘快捷键 N / n 新建事项
   useEffect(() => {
@@ -421,51 +386,6 @@ export const EisenhowerWorkspace: React.FC<EisenhowerWorkspaceProps> = ({
     }
   };
 
-  // 日历单日排程勾选当天目标完成
-  const handleToggleCalendarTaskComplete = async (taskId: string, dateStr: string) => {
-    const target = tasks.find((t) => t.id === taskId);
-    if (!target) return;
-
-    const isDoneOnTargetDate = target.completedDates?.includes(dateStr) || target.isCompleted;
-    const isLastDay = target.dueDate ? dateStr >= target.dueDate : true;
-
-    setTasks((prev) =>
-      prev.map((item) => {
-        if (item.id !== taskId) return item;
-        const prevDates = Array.isArray(item.completedDates) ? item.completedDates : [];
-        if (!isDoneOnTargetDate) {
-          const nextDates = [...prevDates, dateStr];
-          const shouldFinalComplete = isLastDay;
-          return {
-            ...item,
-            isCompleted: shouldFinalComplete,
-            completedDates: nextDates,
-            completedAt: shouldFinalComplete ? new Date().toISOString() : null,
-          };
-        } else {
-          const nextDates = prevDates.filter((d) => d !== dateStr);
-          return {
-            ...item,
-            isCompleted: false,
-            completedDates: nextDates,
-            completedAt: null,
-          };
-        }
-      })
-    );
-
-    try {
-      if (!isDoneOnTargetDate && isLastDay) {
-        await api.post(`/tasks/${taskId}/action`, { action: 'complete' });
-      } else if (isDoneOnTargetDate && target.isCompleted) {
-        await api.post(`/tasks/${taskId}/action`, { action: 'reopen' });
-      }
-    } catch (err) {
-      console.error('更新日历排程完成状态失败:', err);
-      fetchTasks();
-    }
-  };
-
   // 删除任务
   const handleDeleteTask = async (taskId: string) => {
     if (!window.confirm('确定要删除该待办事项吗？')) return;
@@ -484,34 +404,6 @@ export const EisenhowerWorkspace: React.FC<EisenhowerWorkspaceProps> = ({
     setEditingTask(task);
     setClickCoords(null);
     setIsTaskModalOpen(true);
-  };
-
-  // 同步外部日历并重新智能规划排程
-  const handleSyncCalendar = async () => {
-    setIsSyncing(true);
-    setSyncError(null);
-    try {
-      await api.post('/calendar/sync-and-replan');
-      await Promise.all([fetchTasks(), fetchCalendarData()]);
-    } catch (err: any) {
-      setSyncError(err.response?.data?.error || '日历同步失败，请检查订阅地址或网络');
-    } finally {
-      setIsSyncing(false);
-    }
-  };
-
-  // 更新订阅地址
-  const handleUpdateSubscriptionUrl = async (newUrl: string) => {
-    try {
-      await api.post('/calendar/subscriptions', {
-        name: '我的外部课程/日程订阅',
-        url: newUrl,
-      });
-      setSubscriptionUrl(newUrl);
-      await handleSyncCalendar();
-    } catch (err: any) {
-      alert(err.response?.data?.error || '保存订阅地址失败');
-    }
   };
 
   // 数据导入
@@ -947,19 +839,9 @@ export const EisenhowerWorkspace: React.FC<EisenhowerWorkspaceProps> = ({
               </div>
             )}
 
-            {/* 3. 单日时间轴排程视图 */}
+            {/* 3. 周视图日历排程 */}
             {currentView === 'calendar' && (
-              <DayScheduleView
-                tasks={tasks}
-                fixedEvents={fixedEvents}
-                subscriptionUrl={subscriptionUrl}
-                onUpdateSubscriptionUrl={handleUpdateSubscriptionUrl}
-                onSyncCalendar={handleSyncCalendar}
-                isSyncing={isSyncing}
-                syncError={syncError}
-                onToggleCompleteTask={handleToggleCalendarTaskComplete}
-                onEditTask={handleEditTask}
-              />
+              <CalendarView />
             )}
           </div>
         </section>
