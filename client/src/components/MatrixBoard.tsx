@@ -92,104 +92,89 @@ export const MatrixBoard: React.FC<MatrixBoardProps> = ({
     >
       {/* ===================== 四象限背景网格与轻量底色 (Google Todo 配色) ===================== */}
       <div className="absolute inset-0 grid grid-cols-2 grid-rows-2 pointer-events-none">
-        {/* 象限 I (左上): 重要且紧急 */}
+        {/* 象限 I (左上): Do First */}
         <div className="relative border-r border-b border-dashed border-gray-200 dark:border-neutral-800/80 bg-rose-50/25 dark:bg-rose-950/10 p-3 sm:p-4 flex flex-col justify-start">
           <div className="flex items-center gap-1.5 opacity-80">
             <span className="h-2 w-2 rounded-full bg-rose-500" />
             <span className="text-xs font-bold text-rose-700 dark:text-rose-300 tracking-wider">
-              象限 I · 重要且紧急
-            </span>
-            <span className="text-[10px] text-rose-600 dark:text-rose-400 font-medium hidden sm:inline">
-              (DO FIRST · 立即执行)
+              Do First
             </span>
           </div>
         </div>
 
-        {/* 象限 II (右上): 重要不紧急 */}
+        {/* 象限 II (右上): Schedule */}
         <div className="relative border-b border-dashed border-gray-200 dark:border-neutral-800/80 bg-blue-50/25 dark:bg-blue-950/10 p-3 sm:p-4 flex flex-col justify-start items-end">
           <div className="flex items-center gap-1.5 opacity-80">
             <span className="h-2 w-2 rounded-full bg-blue-500" />
             <span className="text-xs font-bold text-blue-700 dark:text-blue-300 tracking-wider">
-              象限 II · 重要不紧急
-            </span>
-            <span className="text-[10px] text-blue-600 dark:text-blue-400 font-medium hidden sm:inline">
-              (SCHEDULE · 规划深耕)
+              Schedule
             </span>
           </div>
         </div>
 
-        {/* 象限 III (左下): 紧急不重要 */}
+        {/* 象限 III (左下): Delegate */}
         <div className="relative border-r border-dashed border-gray-200 dark:border-neutral-800/80 bg-amber-50/25 dark:bg-amber-950/10 p-3 sm:p-4 flex flex-col justify-end">
           <div className="flex items-center gap-1.5 opacity-80">
             <span className="h-2 w-2 rounded-full bg-amber-500" />
             <span className="text-xs font-bold text-amber-700 dark:text-amber-300 tracking-wider">
-              象限 III · 紧急不重要
-            </span>
-            <span className="text-[10px] text-amber-600 dark:text-amber-400 font-medium hidden sm:inline">
-              (DELEGATE · 批量委派)
+              Delegate
             </span>
           </div>
         </div>
 
-        {/* 象限 IV (右下): 不重要不紧急 */}
+        {/* 象限 IV (右下): Eliminate */}
         <div className="relative bg-gray-50/30 dark:bg-neutral-900/15 p-3 sm:p-4 flex flex-col justify-end items-end">
           <div className="flex items-center gap-1.5 opacity-70">
             <span className="h-2 w-2 rounded-full bg-gray-400 dark:bg-neutral-500" />
             <span className="text-xs font-bold text-gray-700 dark:text-neutral-300 tracking-wider">
-              象限 IV · 不重要不紧急
-            </span>
-            <span className="text-[10px] text-gray-500 dark:text-neutral-400 font-medium hidden sm:inline">
-              (ELIMINATE · 琐事备忘)
+              Eliminate
             </span>
           </div>
         </div>
       </div>
 
       {/* ===================== 十字交叉坐标轴 (Center Axes) ===================== */}
-      {/* 纵轴 (Y 轴): 重要程度 (Importance) */}
+      {/* 纵轴 (Y 轴): 重要程度 (Important / Not Important) */}
       <div className="absolute left-1/2 top-0 bottom-0 w-px bg-gray-300 dark:bg-neutral-700 pointer-events-none z-10 -translate-x-1/2">
         {/* 上箭头与标签 */}
         <div className="absolute top-2 left-1/2 -translate-x-1/2 flex flex-col items-center gap-0.5">
           <div className="w-0 h-0 border-x-4 border-x-transparent border-b-6 border-b-gray-500 dark:border-b-neutral-400" />
           <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-white/95 dark:bg-[#1e1f20]/95 text-rose-700 dark:text-rose-300 border border-gray-200 dark:border-neutral-700 shadow-2xs whitespace-nowrap">
-            重要 (Importance: 10)
+            Important
           </span>
         </div>
 
         {/* 下箭头与标签 */}
         <div className="absolute bottom-2 left-1/2 -translate-x-1/2 flex flex-col items-center gap-0.5">
           <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-white/95 dark:bg-[#1e1f20]/95 text-gray-600 dark:text-neutral-400 border border-gray-200 dark:border-neutral-700 shadow-2xs whitespace-nowrap">
-            不重要 (Importance: 0)
+            Not Important
           </span>
           <div className="w-0 h-0 border-x-4 border-x-transparent border-t-6 border-t-gray-500 dark:border-t-neutral-400" />
         </div>
       </div>
 
-      {/* 横轴 (X 轴): 紧迫程度 (Urgency) */}
+      {/* 横轴 (X 轴): 紧迫程度 (Urgent / Not Urgent) */}
       <div className="absolute top-1/2 left-0 right-0 h-px bg-gray-300 dark:bg-neutral-700 pointer-events-none z-10 -translate-y-1/2">
         {/* 左箭头与标签 */}
         <div className="absolute left-2 top-1/2 -translate-y-1/2 flex items-center gap-1">
           <div className="w-0 h-0 border-y-4 border-y-transparent border-r-6 border-r-gray-500 dark:border-r-neutral-400" />
           <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-white/95 dark:bg-[#1e1f20]/95 text-amber-700 dark:text-amber-300 border border-gray-200 dark:border-neutral-700 shadow-2xs whitespace-nowrap">
-            紧急 (Urgency: 10)
+            Urgent
           </span>
         </div>
 
         {/* 右箭头与标签 */}
         <div className="absolute right-2 top-1/2 -translate-y-1/2 flex items-center gap-1">
           <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-white/95 dark:bg-[#1e1f20]/95 text-blue-700 dark:text-blue-300 border border-gray-200 dark:border-neutral-700 shadow-2xs whitespace-nowrap">
-            不紧急 (Urgency: 0)
+            Not Urgent
           </span>
           <div className="w-0 h-0 border-y-4 border-y-transparent border-l-6 border-l-gray-500 dark:border-l-neutral-400" />
         </div>
       </div>
 
-      {/* 中心原点 (Intersection Threshold 5.0, 5.0) - Google Blue */}
+      {/* 中心原点 - Google Blue */}
       <div className="absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 pointer-events-none z-10 flex items-center justify-center">
-        <div className="h-3 w-3 rounded-full bg-blue-600 dark:bg-blue-500 ring-4 ring-white dark:ring-[#1e1f20] shadow-xs" />
-        <span className="absolute -bottom-4 text-[9px] font-mono text-gray-400 dark:text-neutral-500 font-semibold">
-          (5, 5)
-        </span>
+        <div className="h-2.5 w-2.5 rounded-full bg-blue-600 dark:bg-blue-500 ring-4 ring-white dark:ring-[#1e1f20] shadow-xs" />
       </div>
 
       {/* ===================== 坐标系任务落位节点 (Task Coordinate Nodes · 模仿 oxoxox 经典排版) ===================== */}
