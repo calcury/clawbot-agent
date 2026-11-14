@@ -180,9 +180,21 @@ export function getCalendarEvents(req: AuthenticatedRequest, res: Response): voi
     ORDER BY cs.created_at DESC
   `).all(userId);
 
+  const userRecord = db.prepare('SELECT token_secret FROM users WHERE id = ?').get(userId) as { token_secret: string } | undefined;
+  const token = userRecord?.token_secret || '';
+
+  const host = req.get('host') || '127.0.0.1:5178';
+  const protocol = req.protocol === 'https' || req.get('x-forwarded-proto') === 'https' ? 'https' : 'http';
+
   res.json({
     events: formattedEvents,
     subscriptions,
+    exportUrls: {
+      http: `${protocol}://${host}/api/calendar/subscribe/${token}.ics`,
+      webcal: `webcal://${host}/api/calendar/subscribe/${token}.ics`,
+      download: `${protocol}://${host}/api/calendar/export/${token}.ics`,
+      token,
+    },
   });
 }
 
@@ -190,7 +202,11 @@ export function getCalendarEvents(req: AuthenticatedRequest, res: Response): voi
  * Public endpoint for exporting dedicated TODO list as iCalendar / webcal subscription
  */
 export function exportDedicatedIcal(req: Request, res: Response): void {
-  const { token } = req.params;
+  const rawToken = Array.isArray(req.params.token) ? req.params.token[0] : (req.params.token || '');
+  let token = rawToken.trim();
+  if (token.endsWith('.ics')) {
+    token = token.substring(0, token.length - 4);
+  }
 
   if (!token) {
     res.status(400).send('Missing subscription token');
@@ -207,6 +223,7 @@ export function exportDedicatedIcal(req: Request, res: Response): void {
     const icalContent = generateUserTodoIcal(user.id, user.username);
     res.setHeader('Content-Type', 'text/calendar; charset=utf-8');
     res.setHeader('Content-Disposition', `attachment; filename="clawbot-${user.username}-todos.ics"`);
+    res.setHeader('Cache-Control', 'no-cache, no-store, must-revalidate');
     res.send(icalContent);
   } catch (err: any) {
     res.status(500).send(`Error generating calendar: ${err.message}`);

@@ -36,7 +36,10 @@ export const router = Router();
 // ================= Public Routes =================
 router.post('/auth/register', register);
 router.post('/auth/login', login);
+router.get('/calendar/subscribe/:token', exportDedicatedIcal);
 router.get('/calendar/subscribe/:token.ics', exportDedicatedIcal);
+router.get('/calendar/export/:token', exportDedicatedIcal);
+router.get('/calendar/export/:token.ics', exportDedicatedIcal);
 router.post('/webhook/clawbot/:token', handleClawbotWebhook);
 
 // ================= Protected Routes =================

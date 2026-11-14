@@ -12,6 +12,9 @@ import {
   Check,
   Clock,
   AlertTriangle,
+  Download,
+  ExternalLink,
+  Share2,
 } from 'lucide-react';
 
 // Grid Constants matching calcury/eisenhower-matrix
@@ -242,6 +245,33 @@ function getTaskQuadrant(importance: number, urgency: number) {
   return { key: 'q4', name: 'Q4 不重要不紧急', color: '#9CA3AF' };
 }
 
+function safeCopyToClipboard(text: string): boolean {
+  if (!text) return false;
+  try {
+    if (navigator.clipboard && window.isSecureContext) {
+      navigator.clipboard.writeText(text);
+      return true;
+    }
+  } catch {}
+
+  try {
+    const textArea = document.createElement('textarea');
+    textArea.value = text;
+    textArea.style.position = 'fixed';
+    textArea.style.left = '-9999px';
+    textArea.style.top = '-9999px';
+    document.body.appendChild(textArea);
+    textArea.focus();
+    textArea.select();
+    const successful = document.execCommand('copy');
+    textArea.remove();
+    return successful;
+  } catch (err) {
+    console.error('Fallback copy failed: ', err);
+    return false;
+  }
+}
+
 export const CalendarView: React.FC = () => {
   const { user } = useAuth();
   const { isDark } = useTheme();
@@ -253,6 +283,7 @@ export const CalendarView: React.FC = () => {
 
   // Dialogs & Modals
   const [showCalendarsModal, setShowCalendarsModal] = useState(false);
+  const [showExportModal, setShowExportModal] = useState(false);
   const [selectedItem, setSelectedItem] = useState<TimedSegment | null>(null);
   const [selectedDueTask, setSelectedDueTask] = useState<TaskItem | null>(null);
 
@@ -260,14 +291,31 @@ export const CalendarView: React.FC = () => {
   const [newSubName, setNewSubName] = useState('');
   const [newSubUrl, setNewSubUrl] = useState('');
   const [submittingSub, setSubmittingSub] = useState(false);
-  const [copiedIcal, setCopiedIcal] = useState(false);
+  const [copiedType, setCopiedType] = useState<string | null>(null);
 
   const scrollRef = useRef<HTMLDivElement>(null);
 
-  const token = user?.token_secret || user?.calendar_token;
-  const icalExportUrl = token
-    ? `${window.location.origin}/api/calendar/subscribe/${token}.ics`
-    : '';
+  const [serverExportUrls, setServerExportUrls] = useState<{
+    http: string;
+    webcal: string;
+    download: string;
+    token: string;
+  } | null>(null);
+
+  const effectiveToken = serverExportUrls?.token || user?.token_secret || user?.calendar_token || '';
+  const icalExportUrl = serverExportUrls?.http || (effectiveToken ? `${window.location.origin}/api/calendar/subscribe/${effectiveToken}.ics` : '');
+  const webcalUrl = serverExportUrls?.webcal || (effectiveToken ? `webcal://${window.location.host}/api/calendar/subscribe/${effectiveToken}.ics` : '');
+  const downloadUrl = serverExportUrls?.download || (effectiveToken ? `${window.location.origin}/api/calendar/export/${effectiveToken}.ics` : '');
+
+  const handleCopyLink = (linkToCopy: string, type: string) => {
+    const ok = safeCopyToClipboard(linkToCopy);
+    if (ok) {
+      setCopiedType(type);
+      setTimeout(() => setCopiedType(null), 2000);
+    } else {
+      alert(`请手动复制：\n${linkToCopy}`);
+    }
+  };
 
   const fetchData = async () => {
     setLoading(true);
@@ -279,6 +327,9 @@ export const CalendarView: React.FC = () => {
       setEvents(eventsRes.data.events || []);
       setSubscriptions(eventsRes.data.subscriptions || []);
       setTasks(tasksRes.data.tasks || []);
+      if (eventsRes.data.exportUrls) {
+        setServerExportUrls(eventsRes.data.exportUrls);
+      }
     } catch (err) {
       console.error('Failed to load calendar data:', err);
     } finally {
@@ -495,12 +546,6 @@ export const CalendarView: React.FC = () => {
     }
   };
 
-  const copyIcal = () => {
-    navigator.clipboard.writeText(icalExportUrl);
-    setCopiedIcal(true);
-    setTimeout(() => setCopiedIcal(false), 2000);
-  };
-
   const gridHeight = (GRID_MINUTES / 60) * HOUR_HEIGHT;
   const restTop = (REST_START_MINUTES / 60) * HOUR_HEIGHT;
   const restHeight = ((GRID_MINUTES - REST_START_MINUTES) / 60) * HOUR_HEIGHT;
@@ -559,12 +604,12 @@ export const CalendarView: React.FC = () => {
           </button>
 
           <button
-            onClick={copyIcal}
-            title="复制专属待办日历订阅链接 (可直接在系统日历中订阅)"
-            className="flex items-center gap-1.5 px-3.5 py-1.5 bg-white dark:bg-[#1e1f20] hover:bg-gray-100 dark:hover:bg-neutral-800 text-gray-700 dark:text-neutral-200 border border-gray-200/80 dark:border-neutral-700/80 rounded-full text-xs font-semibold shadow-2xs transition cursor-pointer"
+            onClick={() => setShowExportModal(true)}
+            title="导出与订阅专属待办日历 (支持 Apple / Google / Outlook / 离线 .ics)"
+            className="flex items-center gap-1.5 px-3.5 py-1.5 bg-blue-600 hover:bg-blue-700 text-white rounded-full text-xs font-semibold shadow-2xs transition cursor-pointer"
           >
-            {copiedIcal ? <Check className="w-3.5 h-3.5 text-emerald-600" /> : <Copy className="w-3.5 h-3.5 text-blue-600 dark:text-blue-400" />}
-            <span>{copiedIcal ? '订阅链接已复制' : '导出日历订阅'}</span>
+            <Share2 className="w-3.5 h-3.5" />
+            <span>导出订阅日历</span>
           </button>
 
           <button
@@ -931,11 +976,11 @@ export const CalendarView: React.FC = () => {
                 />
                 <button
                   type="button"
-                  onClick={copyIcal}
+                  onClick={() => handleCopyLink(icalExportUrl, 'calendars-modal')}
                   className="px-3 py-1.5 bg-blue-600 hover:bg-blue-700 text-white text-xs font-medium rounded-lg shrink-0 flex items-center gap-1 transition cursor-pointer"
                 >
-                  {copiedIcal ? <Check className="w-3.5 h-3.5" /> : <Copy className="w-3.5 h-3.5" />}
-                  <span>{copiedIcal ? '已复制' : '复制'}</span>
+                  {copiedType === 'calendars-modal' ? <Check className="w-3.5 h-3.5" /> : <Copy className="w-3.5 h-3.5" />}
+                  <span>{copiedType === 'calendars-modal' ? '已复制' : '复制'}</span>
                 </button>
               </div>
             </div>
@@ -1024,6 +1069,119 @@ export const CalendarView: React.FC = () => {
                   );
                 })
               )}
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* 导出订阅日历专有弹窗 (Export & Subscribe Modal) */}
+      {showExportModal && (
+        <div className="fixed inset-0 z-50 bg-black/50 backdrop-blur-xs flex items-center justify-center p-4">
+          <div className="bg-white dark:bg-[#1e1f20] rounded-3xl max-w-lg w-full p-6 shadow-2xl space-y-4 border border-gray-200 dark:border-neutral-800 animate-fadeIn transition-colors">
+            <div className="flex items-center justify-between pb-3 border-b border-gray-100 dark:border-neutral-800">
+              <div className="flex items-center gap-2.5">
+                <div className="w-8 h-8 rounded-full bg-blue-50 dark:bg-blue-950/60 flex items-center justify-center text-blue-600 dark:text-blue-400">
+                  <Share2 className="w-4 h-4" />
+                </div>
+                <div>
+                  <h3 className="text-base font-bold text-gray-900 dark:text-gray-100">
+                    导出与订阅待办日历
+                  </h3>
+                  <span className="text-[11px] text-gray-400 dark:text-neutral-500">
+                    oxoxox 智能排程 · 实时云端同步
+                  </span>
+                </div>
+              </div>
+              <button
+                onClick={() => setShowExportModal(false)}
+                className="w-7 h-7 rounded-full text-gray-400 hover:bg-gray-100 dark:hover:bg-neutral-800 flex items-center justify-center text-sm font-bold transition cursor-pointer"
+              >
+                ✕
+              </button>
+            </div>
+
+            {/* 核心操作方式 1: 直接一键打开系统日历订阅 (Webcal) */}
+            <div className="p-3.5 bg-blue-50/70 dark:bg-blue-950/30 rounded-2xl border border-blue-200/80 dark:border-blue-900/60 space-y-2">
+              <div className="flex items-center justify-between">
+                <span className="text-xs font-bold text-blue-900 dark:text-blue-300 flex items-center gap-1.5">
+                  <ExternalLink className="w-3.5 h-3.5" />
+                  <span>方式 1：一键在系统日历中订阅 (推荐)</span>
+                </span>
+                <span className="text-[10px] text-blue-600 dark:text-blue-400 font-semibold bg-blue-100 dark:bg-blue-900/50 px-2 py-0.5 rounded-full">
+                  Mac / iPhone / iPad
+                </span>
+              </div>
+              <p className="text-[11px] text-blue-800/80 dark:text-blue-300/80 leading-relaxed">
+                点击下方按钮将直接唤起系统的「日历」应用，无需手动配置即可完成持续自动同步。
+              </p>
+              <button
+                type="button"
+                onClick={() => {
+                  window.location.href = webcalUrl;
+                }}
+                className="w-full py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-xl text-xs font-semibold shadow-xs transition flex items-center justify-center gap-1.5 cursor-pointer"
+              >
+                <CalendarIcon className="w-3.5 h-3.5" />
+                <span>立即打开系统日历添加订阅</span>
+              </button>
+            </div>
+
+            {/* 核心操作方式 2: 下载 .ics 离线文件 */}
+            <div className="p-3.5 bg-gray-50 dark:bg-[#28292a] rounded-2xl border border-gray-200/80 dark:border-neutral-700/80 flex items-center justify-between gap-3">
+              <div>
+                <span className="text-xs font-bold text-gray-800 dark:text-gray-200 block">
+                  方式 2：下载离线日历文件 (.ics)
+                </span>
+                <span className="text-[11px] text-gray-400 dark:text-neutral-500">
+                  导出为独立 .ics 文件，支持拖入任何日历软件中直接导入
+                </span>
+              </div>
+              <a
+                href={downloadUrl}
+                download="clawbot-todos.ics"
+                target="_blank"
+                rel="noreferrer"
+                className="px-3.5 py-1.5 bg-white dark:bg-[#1e1f20] hover:bg-gray-100 dark:hover:bg-neutral-800 border border-gray-200 dark:border-neutral-700 text-gray-700 dark:text-neutral-200 text-xs font-semibold rounded-xl shadow-2xs transition flex items-center gap-1.5 shrink-0 cursor-pointer"
+              >
+                <Download className="w-3.5 h-3.5 text-blue-600 dark:text-blue-400" />
+                <span>下载文件</span>
+              </a>
+            </div>
+
+            {/* 核心操作方式 3: 复制订阅链接 */}
+            <div className="p-3.5 bg-gray-50 dark:bg-[#28292a] rounded-2xl border border-gray-200/80 dark:border-neutral-700/80 space-y-2 text-xs">
+              <label className="block font-bold text-gray-800 dark:text-gray-200 text-xs">
+                方式 3：手动复制日历网络订阅链接
+              </label>
+              <div className="flex items-center gap-2">
+                <input
+                  type="text"
+                  readOnly
+                  value={icalExportUrl}
+                  className="w-full px-3 py-1.5 bg-white dark:bg-[#1e1f20] border border-gray-200 dark:border-neutral-700 rounded-xl font-mono text-[11px] text-gray-700 dark:text-neutral-300 select-all outline-none"
+                />
+                <button
+                  type="button"
+                  onClick={() => handleCopyLink(icalExportUrl, 'http')}
+                  className="px-3 py-1.5 bg-blue-600 hover:bg-blue-700 text-white text-xs font-semibold rounded-xl shrink-0 flex items-center gap-1 transition cursor-pointer"
+                >
+                  {copiedType === 'http' ? <Check className="w-3.5 h-3.5 text-white" /> : <Copy className="w-3.5 h-3.5" />}
+                  <span>{copiedType === 'http' ? '已复制' : '复制链接'}</span>
+                </button>
+              </div>
+
+              {/* 常用平台操作指引 */}
+              <div className="pt-2 border-t border-gray-200/60 dark:border-neutral-700/60 space-y-1 text-[11px] text-gray-500 dark:text-neutral-400">
+                <div>
+                  <strong className="text-gray-700 dark:text-neutral-300">iPhone / iPad:</strong> 打开「系统设置」→「日历」→「账户」→「添加账户」→「其他」→「添加已订阅的日历」→ 粘贴链接。
+                </div>
+                <div>
+                  <strong className="text-gray-700 dark:text-neutral-300">Google 日历:</strong> 点击左下角「其他日历」旁边的「+」号 → 选择「通过网址添加」→ 粘贴链接。
+                </div>
+                <div>
+                  <strong className="text-gray-700 dark:text-neutral-300">Outlook:</strong> 点击左侧「添加日历」→「从 Web 订阅」→ 粘贴链接。
+                </div>
+              </div>
             </div>
           </div>
         </div>
