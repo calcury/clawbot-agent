@@ -251,6 +251,9 @@ importers:
       clsx:
         specifier: ^2.1.1
         version: 2.1.1
+      ical.js:
+        specifier: ^2.2.1
+        version: 2.2.1
       lucide-react:
         specifier: ^1.70.0
         version: 1.70.0(@types/react@19.3.0)(react@19.3.1)
@@ -1352,6 +1355,9 @@ packages:
         optional: true
       rrule:
         optional: true
+
+  ical.js@2.2.1:
+    resolution: {integrity: sha512-yK/UlPbEs316igb/tjRgbFA8ZV75rCsBJp/hWOatpyaPNlgw0dGDmU+FoicOcwX4xXkeXOkYiOmCqNPFpNPkQg==}
 
   iconv-lite@0.7.3:
     resolution: {integrity: sha512-IKXpvIzjnC9XTAUbVBcMfGS0EPaIXtW6v+zr+RRp+hqULEpo0owZax6wyRwPOJbWbzjYspQwusTsfVr0ifh4uQ==}
@@ -2623,6 +2629,8 @@ snapshots:
   ical-generator@11.1.3(@types/node@26.6.6):
     optionalDependencies:
       '@types/node': 26.6.6
+
+  ical.js@2.2.1: {}
 
   iconv-lite@0.7.3:
     dependencies:

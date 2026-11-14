@@ -3,6 +3,7 @@ import { useAuth } from '../context/AuthContext';
 import { useTheme, type ThemeMode } from '../context/ThemeContext';
 import {
   Calendar as CalendarIcon,
+  LayoutGrid,
   CheckSquare,
   Settings,
   Users,
@@ -38,7 +39,7 @@ export const Navbar: React.FC<NavbarProps> = ({ activeTab, setActiveTab, pending
   }, []);
 
   const navItems = [
-    { id: 'todos', label: '待办清单', icon: CheckSquare },
+    { id: 'todos', label: '四象限看板', icon: LayoutGrid },
     { id: 'calendar', label: '日历日程', icon: CalendarIcon },
     { id: 'settings', label: '设置 & 对接', icon: Settings },
   ];

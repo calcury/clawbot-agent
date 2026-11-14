@@ -40,6 +40,7 @@ export const TaskModal: React.FC<TaskModalProps> = ({
   onSave,
   initialTask,
   defaultImportance = 7,
+  defaultUrgency,
   allExistingTags = [],
 }) => {
   const [title, setTitle] = useState('');
@@ -64,11 +65,28 @@ export const TaskModal: React.FC<TaskModalProps> = ({
       setTitle('');
       setDescription('');
       setImportance(defaultImportance);
-      setDueDate(todayStr);
+      // 如果是通过四象限坐标看板点击空白处打开，按点击位置智能映射初始截止日期
+      let initialDueDate = todayStr;
+      if (typeof defaultUrgency === 'number') {
+        const target = new Date();
+        if (defaultUrgency >= 8) {
+          target.setDate(target.getDate() + 0);
+        } else if (defaultUrgency >= 6) {
+          target.setDate(target.getDate() + 1);
+        } else if (defaultUrgency >= 4) {
+          target.setDate(target.getDate() + 3);
+        } else if (defaultUrgency >= 2) {
+          target.setDate(target.getDate() + 7);
+        } else {
+          target.setDate(target.getDate() + 14);
+        }
+        initialDueDate = formatLocalDate(target);
+      }
+      setDueDate(initialDueDate);
       setEstimatedMinutes('');
       setTags([]);
     }
-  }, [initialTask, defaultImportance, isOpen]);
+  }, [initialTask, defaultImportance, defaultUrgency, isOpen]);
 
   // 实时根据截止日期与预计耗时自动计算紧迫度
   const effectiveDueDate = dueDate || formatLocalDate(new Date());

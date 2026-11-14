@@ -217,6 +217,16 @@ export function quickActionTask(req: AuthenticatedRequest, res: Response): void 
     return;
   }
 
+  if (action === 'reopen') {
+    db.prepare(`
+      UPDATE tasks
+      SET status = 'scheduled', updated_at = CURRENT_TIMESTAMP
+      WHERE id = ?
+    `).run(id);
+    res.json({ message: `任务「${task.title}」已重新标为进行中！` });
+    return;
+  }
+
   if (action === 'extend') {
     if (!task.scheduled_end) {
       res.status(400).json({ error: '该任务未安排时间，无法延长' });
