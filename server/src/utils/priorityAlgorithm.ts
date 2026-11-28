@@ -18,7 +18,7 @@ export type ImpactSignal =
   | 'irreversible_cost'
   | 'long_term_compound'
   | 'daily_keystone';
-export type TimeMode = 'deadline' | 'daily_fixed' | 'flexible';
+export type TimeMode = 'deadline' | 'specific_date' | 'daily_fixed' | 'flexible';
 export type UrgencyPace = 'urgent' | 'soon' | 'later';
 
 export interface ImportanceTierConfig {
@@ -191,6 +191,8 @@ export interface DynamicUrgencyParams {
   isCompletedToday?: boolean;
   dailyBusyMinutesAhead?: number | null;
   dailyFreeMinutesRemaining?: number | null;
+  nearTermLoadRatio?: number | null; // 0 ~ 1: 近期(未来3~7天)可用时段忙碌度
+  createdAt?: string | Date | null; // 用于弹性任务的温和老化防饥饿加权
   workEndHour?: number;
   fallbackUrgency?: number; // 0 ~ 100
   currentTime?: Date;
@@ -244,6 +246,8 @@ export function calculateDynamicUrgency({
   isCompletedToday = false,
   dailyBusyMinutesAhead = null,
   dailyFreeMinutesRemaining = null,
+  nearTermLoadRatio = null,
+  createdAt = null,
   workEndHour = 22,
   fallbackUrgency = PRIORITY_THRESHOLD,
   currentTime = new Date(),
@@ -256,7 +260,10 @@ export function calculateDynamicUrgency({
   const effectiveEffortHours = effortHours * leadFactor;
 
   const effectiveMode: TimeMode =
-    timeMode === 'daily_fixed' || timeMode === 'flexible' || timeMode === 'deadline'
+    timeMode === 'daily_fixed' ||
+    timeMode === 'flexible' ||
+    timeMode === 'specific_date' ||
+    timeMode === 'deadline'
       ? timeMode
       : dueDate
       ? 'deadline'
@@ -384,21 +391,82 @@ export function calculateDynamicUrgency({
     };
   }
 
-  // ---------------- 模式 C：弹性无截止日任务 ----------------
+  // ---------------- 模式 C：弹性无截止日任务（近期负荷感知 + 温和老化防饥饿） ----------------
   if (effectiveMode === 'flexible' || !dueDate) {
+    const safePace: UrgencyPace =
+      urgencyPace === 'urgent' || urgencyPace === 'later' || urgencyPace === 'soon'
+        ? urgencyPace
+        : 'soon';
     const paceBase =
-      urgencyPace === 'urgent' ? 80 : urgencyPace === 'later' ? 25 : 55;
+      safePace === 'urgent' ? 80 : safePace === 'later' ? 25 : 55;
+
+    const hasLoadSignal =
+      nearTermLoadRatio !== null &&
+      nearTermLoadRatio !== undefined &&
+      Number.isFinite(nearTermLoadRatio);
+    const clampedLoad = hasLoadSignal
+      ? Math.max(0, Math.min(1, nearTermLoadRatio!))
+      : null;
+
+    let loadDelta = 0;
+    if (clampedLoad !== null) {
+      if (safePace === 'urgent') {
+        loadDelta = clampedLoad >= 0.7 ? 4 : clampedLoad >= 0.5 ? 2 : 0;
+      } else if (safePace === 'soon') {
+        if (clampedLoad >= 0.65) {
+          loadDelta = -Math.round(((clampedLoad - 0.65) / 0.35) * 14);
+        } else if (clampedLoad < 0.35) {
+          loadDelta = Math.round(((0.35 - clampedLoad) / 0.35) * 5);
+        }
+      } else {
+        // later: 忙碌时明显退让；极清闲时小幅上浮
+        if (clampedLoad >= 0.45) {
+          loadDelta = -Math.round(((clampedLoad - 0.45) / 0.55) * 10);
+        } else if (clampedLoad < 0.25) {
+          loadDelta = 3;
+        }
+      }
+    }
+
+    let ageDays = 0;
+    if (createdAt) {
+      const createdMs = createdAt instanceof Date ? createdAt.getTime() : new Date(createdAt).getTime();
+      if (Number.isFinite(createdMs) && createdMs < currentTime.getTime()) {
+        ageDays = (currentTime.getTime() - createdMs) / 86_400_000;
+      }
+    }
+
+    const busyAgingScale = clampedLoad !== null && clampedLoad >= 0.75 ? 0.5 : 1;
+    let agingDelta = 0;
+    if (safePace === 'urgent') {
+      agingDelta = Math.min(6, Math.floor(ageDays / 2));
+    } else if (safePace === 'soon') {
+      agingDelta = ageDays <= 2 ? 0 : Math.min(10, Math.floor((ageDays - 2) * busyAgingScale));
+    } else {
+      agingDelta = ageDays <= 5 ? 0 : Math.min(10, Math.floor((ageDays - 5) * 0.6 * busyAgingScale));
+    }
+
     const score = dueDate
       ? paceBase
       : timeMode === 'flexible'
-      ? paceBase + impNorm * 5
-      : fallbackUrgency + impNorm * 4;
+      ? paceBase + impNorm * 5 + loadDelta + agingDelta
+      : fallbackUrgency + impNorm * 4 + Math.round(loadDelta * 0.5);
+
     const paceText =
-      urgencyPace === 'urgent'
+      safePace === 'urgent'
         ? '弹性 · 尽快推进'
-        : urgencyPace === 'later'
-        ? '弹性 · 远期备忘'
+        : safePace === 'later'
+        ? clampedLoad !== null && clampedLoad >= 0.45
+          ? '弹性 · 忙时暂留备忘池'
+          : ageDays >= 14
+          ? `弹性 · 远期备忘（待排 ${Math.floor(ageDays)} 天）`
+          : '弹性 · 远期备忘'
+        : clampedLoad !== null && clampedLoad >= 0.65
+        ? '弹性 · 近期较忙，顺延待排'
+        : clampedLoad !== null && clampedLoad < 0.35
+        ? '弹性 · 近日空闲可推进'
         : '弹性 · 近日规划';
+
     return {
       urgency: Math.min(92, Math.max(10, clampScore100(score))),
       slackHours: null,
@@ -407,11 +475,12 @@ export function calculateDynamicUrgency({
     };
   }
 
-  // ---------------- 模式 A：截止日期 + LLF + 重要度耦合 ----------------
+  // ---------------- 模式 A：截止日期 / 指定执行日 + LLF + 重要度耦合 ----------------
   const dueDateTime = parseDueDateTime(dueDate);
   const diffMs = dueDateTime.getTime() - currentTime.getTime();
   const remainingHours = diffMs / (1000 * 60 * 60);
   const effectiveSlackHours = remainingHours - effectiveEffortHours;
+  const isSpecificDateMode = effectiveMode === 'specific_date';
 
   let timeUrgency: number;
   let statusText: string;
@@ -419,28 +488,39 @@ export function calculateDynamicUrgency({
   if (remainingHours <= 0) {
     timeUrgency = 100;
     const overdueDays = Math.abs(Math.floor(remainingHours / 24));
-    statusText = overdueDays > 0 ? `已逾期 ${overdueDays} 天` : '今天已逾期';
+    statusText = isSpecificDateMode
+      ? overdueDays > 0
+        ? `已过执行日 ${overdueDays} 天`
+        : '今日执行窗口已过'
+      : overdueDays > 0
+      ? `已逾期 ${overdueDays} 天`
+      : '今天已逾期';
   } else if (effectiveSlackHours <= 0) {
     timeUrgency = 97;
-    statusText = '耗时与重要缓冲超限，急需启动';
+    statusText = isSpecificDateMode ? '当日执行缓冲紧张，建议优先安排' : '耗时与重要缓冲超限，急需启动';
   } else if (effectiveSlackHours <= 12) {
     timeUrgency = 90 + (1 - effectiveSlackHours / 12) * 7;
-    statusText = `余 ${Math.max(1, Math.round(remainingHours))} 小时截止`;
+    statusText = isSpecificDateMode
+      ? `今日执行（余 ${Math.max(1, Math.round(remainingHours))} 小时）`
+      : `余 ${Math.max(1, Math.round(remainingHours))} 小时截止`;
   } else if (effectiveSlackHours <= 24) {
     timeUrgency = 76 + (1 - (effectiveSlackHours - 12) / 12) * 14;
-    statusText = '24小时内到期';
+    statusText = isSpecificDateMode ? '计划 24 小时内执行' : '24小时内到期';
   } else if (effectiveSlackHours <= 72) {
     timeUrgency = 56 + (1 - (effectiveSlackHours - 24) / 48) * 20;
-    statusText = `余 ${Math.ceil(remainingHours / 24)} 天截止`;
+    const days = Math.ceil(remainingHours / 24);
+    statusText = isSpecificDateMode ? `计划 ${days} 天后执行` : `余 ${days} 天截止`;
   } else if (effectiveSlackHours <= 168) {
     timeUrgency = 36 + (1 - (effectiveSlackHours - 72) / 96) * 20;
-    statusText = `余 ${Math.ceil(remainingHours / 24)} 天截止`;
+    const days = Math.ceil(remainingHours / 24);
+    statusText = isSpecificDateMode ? `计划 ${days} 天后执行` : `余 ${days} 天截止`;
   } else if (effectiveSlackHours <= 720) {
     timeUrgency = 20 + (1 - (effectiveSlackHours - 168) / 552) * 16;
-    statusText = `余 ${Math.ceil(remainingHours / 24)} 天截止`;
+    const days = Math.ceil(remainingHours / 24);
+    statusText = isSpecificDateMode ? `计划 ${days} 天后执行` : `余 ${days} 天截止`;
   } else {
     timeUrgency = 12;
-    statusText = '长期从容任务';
+    statusText = isSpecificDateMode ? '远期指定执行日任务' : '长期从容任务';
   }
 
   // 仅在 7 天窗口内叠加重要度协同加权，避免远期核心任务被误推入 Q1

@@ -1967,8 +1967,8 @@ export const SettingsView: React.FC<SettingsViewProps> = ({ onOpenMobileMenu }) 
                   >
                     <option value="none">{t('settings.lock_mode_none', '不锁定（所有未开始日程可随时重排）')}</option>
                     <option value="hours">{t('settings.lock_mode_hours', '按滚动时长锁定（从当前往后锁定 N 小时）')}</option>
-                    <option value="today">{t('settings.lock_mode_today', '锁定所在当天（至今日 23:59，次日零点解除）')}</option>
-                    <option value="this_week">{t('settings.lock_mode_week', '锁定所在当周（至本周日 23:59，下周自动解除）')}</option>
+                    <option value="today">{t('settings.lock_mode_today', '锁定所在当天（固定今日已排日程，次日自动锁定新一天）')}</option>
+                    <option value="this_week">{t('settings.lock_mode_week', '锁定所在当周（固定本周已排日程，下周自动锁定新一周）')}</option>
                   </select>
                 </div>
 
@@ -2017,8 +2017,8 @@ export const SettingsView: React.FC<SettingsViewProps> = ({ onOpenMobileMenu }) 
                       : scheduleLockMode === 'hours'
                       ? `当前将保护至 ${new Date(Date.now() + Math.max(1, scheduleLockHours) * 3600_000).toLocaleString('zh-CN', { month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit', hour12: false })} 前已排定的日程位置；到期未完成或该时间之后仍可重排。`
                       : scheduleLockMode === 'today'
-                      ? '当前将保护今日 23:59 前已排定的日程位置不变，当天剩余空闲时段仍可排入新任务，跨日后未完成任务自动解除锁定。'
-                      : '当前将保护本周日 23:59 前已排定的日程位置不变，本周内剩余空闲时段仍可排入新任务，下周自动进入新锁定周期。'}
+                      ? '当前将保护今日 23:59 前已排定的日程位置不变，当天剩余空闲时段仍可排入新任务；进入次日后会自动锁定新的一天，前一日未完成任务可自动顺延。'
+                      : '当前将保护本周日 23:59 前已排定的日程位置不变，本周内剩余空闲时段仍可排入新任务；进入下周后会自动锁定新的一周，未完成任务可自动顺延。'}
                   </span>
                 </div>
               </div>

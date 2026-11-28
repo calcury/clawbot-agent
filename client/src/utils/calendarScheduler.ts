@@ -205,6 +205,8 @@ function computeTaskPriorityScore(task: TaskItem, targetDate: Date): number {
 
   if (task.timeMode === 'daily_fixed') {
     baseScore += 60;
+  } else if (task.timeMode === 'specific_date') {
+    baseScore += 70;
   }
 
   // EDF (Earliest Deadline First) 截止期临近加权

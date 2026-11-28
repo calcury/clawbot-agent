@@ -234,7 +234,7 @@ export const TaskModal: React.FC<TaskModalProps> = ({
 
   // 2. 结合日期/时间模式 + 耗时 + 日程负荷 + 重要度联动计算紧迫度
   const effectiveDueDateStr =
-    timeMode === 'deadline'
+    timeMode === 'deadline' || timeMode === 'specific_date'
       ? dueTime
         ? `${dueDate || formatLocalDate(new Date())}T${dueTime}:00`
         : dueDate || formatLocalDate(new Date())
@@ -300,7 +300,7 @@ export const TaskModal: React.FC<TaskModalProps> = ({
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     if (!title.trim()) return;
-    if (timeMode === 'deadline' && !dueDate) return;
+    if ((timeMode === 'deadline' || timeMode === 'specific_date') && !dueDate) return;
 
     let scheduledStart: string | null = null;
     let scheduledEnd: string | null = null;
@@ -325,7 +325,7 @@ export const TaskModal: React.FC<TaskModalProps> = ({
       importanceManualOverride: overrideEnabled ? clampScore100(manualImportance) : null,
       useAutoUrgency: true,
       dueDate: effectiveDueDateStr,
-      deadlineKind: timeMode === 'deadline' && hardDeadline ? 'hard' : 'soft',
+      deadlineKind: (timeMode === 'deadline' || timeMode === 'specific_date') && hardDeadline ? 'hard' : 'soft',
       tags,
       estimatedMinutes: typeof estimatedMinutes === 'number' ? estimatedMinutes : undefined,
       isFixed,
@@ -508,8 +508,8 @@ export const TaskModal: React.FC<TaskModalProps> = ({
               </span>
             </div>
 
-            {/* 三种时间模式切换 */}
-            <div className="grid grid-cols-3 gap-1.5 p-1 rounded-xl bg-gray-200/60 dark:bg-neutral-800">
+            {/* 四种时间模式切换 */}
+            <div className="grid grid-cols-2 sm:grid-cols-4 gap-1.5 p-1 rounded-xl bg-gray-200/60 dark:bg-neutral-800">
               <button
                 type="button"
                 onClick={() => setTimeMode('deadline')}
@@ -521,6 +521,18 @@ export const TaskModal: React.FC<TaskModalProps> = ({
               >
                 <Calendar className="h-3 w-3" />
                 <span>{t('task.type_deadline', '截止日期')}</span>
+              </button>
+              <button
+                type="button"
+                onClick={() => setTimeMode('specific_date')}
+                className={`flex items-center justify-center gap-1 py-1.5 px-2 rounded-lg text-[11px] font-medium transition cursor-pointer ${
+                  timeMode === 'specific_date'
+                    ? 'bg-white dark:bg-[#28292a] text-blue-600 dark:text-blue-400 font-semibold shadow-2xs'
+                    : 'text-gray-600 dark:text-neutral-400 hover:text-gray-900'
+                }`}
+              >
+                <Target className="h-3 w-3" />
+                <span>{t('task.type_specific_date', '指定执行日')}</span>
               </button>
               <button
                 type="button"
@@ -550,9 +562,14 @@ export const TaskModal: React.FC<TaskModalProps> = ({
               </button>
             </div>
 
-            {/* 模式 A：截止日期 + 大致日期快捷选择 + 预计耗时 */}
-            {timeMode === 'deadline' && (
+            {/* 模式 A / 指定执行日：日期快捷选择 + 预计耗时 */}
+            {(timeMode === 'deadline' || timeMode === 'specific_date') && (
               <div className="space-y-2.5">
+                {timeMode === 'specific_date' && (
+                  <p className="text-[11px] text-blue-600 dark:text-blue-400 bg-blue-50/70 dark:bg-blue-950/30 border border-blue-200/70 dark:border-blue-800/40 rounded-xl px-2.5 py-1.5">
+                    {t('task.specific_date_hint', '系统将锁定仅在选定日期当天（不会提前到更早日期）安排该任务。')}
+                  </p>
+                )}
                 <div className="flex items-center gap-1.5 flex-wrap">
                   <span className="text-[11px] text-gray-400 mr-0.5">{t('task.quick_select', '快捷选择')}</span>
                   {[
@@ -587,7 +604,10 @@ export const TaskModal: React.FC<TaskModalProps> = ({
                 <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
                   <div>
                     <label className="block text-[10.5px] font-medium text-gray-600 dark:text-neutral-400 mb-1">
-                      {t('task.deadline_date', '截止日期')} <span className="text-rose-500">*</span>
+                      {timeMode === 'specific_date'
+                        ? t('task.execution_date', '执行日期')
+                        : t('task.deadline_date', '截止日期')}{' '}
+                      <span className="text-rose-500">*</span>
                     </label>
                     <input
                       type="date"
@@ -599,7 +619,9 @@ export const TaskModal: React.FC<TaskModalProps> = ({
                   </div>
                   <div>
                     <label className="block text-[10.5px] font-medium text-gray-600 dark:text-neutral-400 mb-1">
-                      {t('task.deadline_time', '截止时刻（可选）')}
+                      {timeMode === 'specific_date'
+                        ? t('task.execution_latest_time', '最晚结束（可选）')
+                        : t('task.deadline_time', '截止时刻（可选）')}
                     </label>
                     <input
                       type="time"
@@ -627,10 +649,12 @@ export const TaskModal: React.FC<TaskModalProps> = ({
               </div>
             )}
 
-            {timeMode === 'deadline' && (
+            {(timeMode === 'deadline' || timeMode === 'specific_date') && (
               <label className="flex items-center gap-2 text-xs text-gray-700 dark:text-neutral-200 cursor-pointer">
                 <input type="checkbox" checked={hardDeadline} onChange={e => setHardDeadline(e.target.checked)} />
-                {t('task.hard_deadline', '不可逾期')}
+                {timeMode === 'specific_date'
+                  ? t('task.strict_same_day', '仅限当天完成（忙时不顺延到次日）')
+                  : t('task.hard_deadline', '不可逾期')}
               </label>
             )}
 

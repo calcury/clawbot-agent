@@ -41,6 +41,7 @@ function resolveInitialBusinessDate(
   timeMode: string,
   recurrenceRule: string | null,
   fixedStartIso: string | null,
+  deadlineIso: string | null,
   now: Date,
   tz: string
 ): string {
@@ -48,6 +49,10 @@ function resolveInitialBusinessDate(
     return getAccountLocalDateKey(new Date(fixedStartIso), tz);
   }
   const todayKey = getAccountLocalDateKey(now, tz);
+  if (timeMode === 'specific_date' && deadlineIso) {
+    const d = parseAccountDateOrIso(deadlineIso, tz);
+    if (d) return getAccountLocalDateKey(d, tz);
+  }
   if (timeMode !== 'daily_fixed') return todayKey;
   for (let offset = 0; offset < 7; offset++) {
     const candidate = offset === 0 ? todayKey : addDaysToDateKey(todayKey, offset);
@@ -411,6 +416,9 @@ export async function createTaskCommand(params: {
   // 1. Validate deadline and hard deadline early BEFORE any LLM call (T13)
   const normalizedDeadline = normalizeCommandDeadline(cmd.deadline, tz);
   const deadlineKind: 'hard' | 'soft' = cmd.deadline_kind === 'hard' ? 'hard' : 'soft';
+  if (cmd.time_mode === 'specific_date' && !normalizedDeadline) {
+    return { success: false, statusCode: 400, message: '指定执行日期的任务需要提供具体日期' };
+  }
   if (deadlineKind === 'hard' && !normalizedDeadline) {
     return { success: false, statusCode: 400, message: '不可逾期任务需要有效的截止时间' };
   }
@@ -621,7 +629,7 @@ export async function createTaskCommand(params: {
     );
 
     newTaskId = Number(res.lastInsertRowid);
-    const initialBizDate = resolveInitialBusinessDate(scores.timeMode, recurrenceRuleJson, fixedCheck.startIso, now, tz);
+    const initialBizDate = resolveInitialBusinessDate(scores.timeMode, recurrenceRuleJson, fixedCheck.startIso, normalizedDeadline, now, tz);
     const inst = ensureTaskInstance(params.userId, newTaskId, initialBizDate, now)!;
     newInstanceId = inst.id;
 
@@ -748,7 +756,11 @@ export async function updateTaskCommand(params: {
       : normalizeCommandDeadline(existing.deadline, tz);
   const nextDeadlineKind: 'hard' | 'soft' =
     cmd.deadline_kind ?? (nextDeadline ? (existing.deadline_kind === 'hard' ? 'hard' : 'soft') : 'soft');
+  const effectiveCandidateMode = cmd.time_mode ?? existing.time_mode;
 
+  if (effectiveCandidateMode === 'specific_date' && !nextDeadline) {
+    return { success: false, statusCode: 400, message: '指定执行日期的任务需要提供具体日期' };
+  }
   if (nextDeadlineKind === 'hard' && !nextDeadline) {
     return { success: false, statusCode: 400, message: '不可逾期任务需要有效的截止时间' };
   }
@@ -826,6 +838,7 @@ export async function updateTaskCommand(params: {
     scheduledEndIso: nextIsFixed ? fixedCheck.endIso : existing.scheduled_end,
     isCompletedToday,
     dailyBusyMinutesAhead: computeTodayBusyMinutes(params.userId, now, existing.id),
+    createdAt: existing.created_at,
   });
 
   const nextVersion = (existing.version || 1) + 1;
@@ -949,6 +962,27 @@ export async function updateTaskCommand(params: {
           SET is_fixed = 0, is_committed = 0, status = 'superseded', updated_at = CURRENT_TIMESTAMP
           WHERE instance_id = ? AND status IN ('planned', 'conflict')
         `).run(inst.id);
+      } else if (
+        scores.timeMode === 'specific_date' &&
+        (existing.time_mode !== 'specific_date' || existing.deadline !== nextDeadline)
+      ) {
+        // Explicit move to a specific execution date: release any previously planned blocks so it moves cleanly
+        db.prepare(`
+          UPDATE schedule_blocks
+          SET is_fixed = 0, is_committed = 0, status = 'superseded', updated_at = CURRENT_TIMESTAMP
+          WHERE instance_id = ? AND status IN ('planned', 'conflict')
+        `).run(inst.id);
+        if (nextDeadline) {
+          const parsedTarget = parseAccountDateOrIso(nextDeadline, tz);
+          if (parsedTarget) {
+            const targetDk = getAccountLocalDateKey(parsedTarget, tz);
+            db.prepare(`
+              UPDATE task_instances
+              SET business_date = ?, updated_at = CURRENT_TIMESTAMP
+              WHERE id = ? AND instance_type = 'once'
+            `).run(targetDk, inst.id);
+          }
+        }
       }
       }
 

@@ -263,7 +263,7 @@ const llmActionSchema = z.object({
   importance: z.number().finite().nullable().optional(),
   importance_tier: z.enum(['vital', 'support', 'minor']).nullable().optional(),
   impact_signals: z.array(z.string()).nullable().optional(),
-  time_mode: z.enum(['deadline', 'daily_fixed', 'flexible']).nullable().optional(),
+  time_mode: z.enum(['deadline', 'specific_date', 'daily_fixed', 'flexible']).nullable().optional(),
   recurrence_rule: z.any().nullable().optional(),
   urgency_pace: z.enum(['urgent', 'soon', 'later']).nullable().optional(),
   deadline: z.string().nullable().optional(),
@@ -345,7 +345,7 @@ JSON 格式规范：
   "importance": number | null,
   "importance_tier": "vital" | "support" | "minor" | null,
   "impact_signals": string[] | null,
-  "time_mode": "deadline" | "daily_fixed" | "flexible" | null,
+  "time_mode": "deadline" | "specific_date" | "daily_fixed" | "flexible" | null,
   "recurrence_rule": string | null,
   "urgency": number | null,
   "dueDate": string | null,
@@ -393,6 +393,7 @@ JSON 格式规范：
 1. 创建任务 (create_task):
    - 常规任务：如“明天写代码2小时” -> intent: "create_task", title: "写代码", duration_minutes: 120, is_fixed: false, is_concurrent: false
    - 灵活任务：未提截止日期的普通任务设为 time_mode: "flexible"，不要强行编造截止期。
+   - 指定执行日任务 (time_mode: "specific_date"): 当用户明确指定某件事在特定某一天做但未限定具体几点（如“这周六大扫除 2 小时”、“12月5号处理报销”），设为 time_mode: "specific_date"，并将该日 23:59:59 写入 deadline，is_fixed: false；若明确说明“仅限当天/不可推迟”，设 deadline_kind: "hard"，否则 "soft"。
    - 固定时间任务 (is_fixed: true): 当用户明确指定任务执行的具体时间点或时间段（如“明天晚上19点看论文一小时”、“安排固定任务 明天下午2点到4点部门开会”），提取 is_fixed: true，并填入完整 ISO 8601 字符串 fixed_start 与 fixed_end（给出开始和时长时推算结束时间）。仅表示截止时间（如“明天19点之前完成”）不视为固定任务。
    - 硬截止 (deadline_kind: "hard"): 当用户明确表示“不可逾期/死线/硬截止/必须在此前完成”，设为 "hard"，否则 "soft"。
    - 双线程任务 (is_concurrent: true): 背景性/允许与其他日程并行重叠时设为 true。

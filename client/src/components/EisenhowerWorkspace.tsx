@@ -289,7 +289,10 @@ export const EisenhowerWorkspace: React.FC<EisenhowerWorkspaceProps> = ({
         : rawImp100;
 
       const timeMode: TimeMode =
-        t.time_mode === 'daily_fixed' || t.time_mode === 'flexible' || t.time_mode === 'deadline'
+        t.time_mode === 'daily_fixed' ||
+        t.time_mode === 'flexible' ||
+        t.time_mode === 'specific_date' ||
+        t.time_mode === 'deadline'
           ? t.time_mode
           : t.deadline
           ? 'deadline'
@@ -301,7 +304,7 @@ export const EisenhowerWorkspace: React.FC<EisenhowerWorkspaceProps> = ({
           : 'soon';
 
       const effectiveDueDate =
-        timeMode === 'deadline'
+        timeMode === 'deadline' || timeMode === 'specific_date'
           ? t.deadline
             ? t.deadline
             : formatLocalDate(new Date(t.created_at || Date.now()))
@@ -328,6 +331,8 @@ export const EisenhowerWorkspace: React.FC<EisenhowerWorkspaceProps> = ({
         scheduledEnd: t.scheduled_end,
         isCompletedToday,
         dailyBusyMinutesAhead: todayBusyMinutesAhead,
+        nearTermLoadRatio: Math.min(1, Math.max(0, todayBusyMinutesAhead / 360)),
+        createdAt: t.created_at,
         fallbackUrgency,
         currentTime,
       });

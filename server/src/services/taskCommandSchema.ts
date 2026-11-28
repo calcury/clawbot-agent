@@ -66,7 +66,7 @@ export const createTaskCommandSchema = z.object({
   impact_signals: z.array(z.string()).optional(),
   importance_manual_override: z.number().finite().min(0).max(100).nullable().optional(),
   score_scale: z.number().int().optional(),
-  time_mode: z.enum(['deadline', 'daily_fixed', 'flexible']).nullable().optional(),
+  time_mode: z.enum(['deadline', 'specific_date', 'daily_fixed', 'flexible']).nullable().optional(),
   recurrence_rule: z.any().nullable().optional(),
   urgency_pace: z.enum(['urgent', 'soon', 'later']).nullable().optional(),
   deadline: z.string().nullable().optional(),
@@ -93,7 +93,7 @@ export const updateTaskCommandSchema = z.object({
   impact_signals: z.array(z.string()).optional(),
   importance_manual_override: z.number().finite().min(0).max(100).nullable().optional(),
   score_scale: z.number().int().optional(),
-  time_mode: z.enum(['deadline', 'daily_fixed', 'flexible']).optional(),
+  time_mode: z.enum(['deadline', 'specific_date', 'daily_fixed', 'flexible']).optional(),
   recurrence_rule: z.any().nullable().optional(),
   urgency_pace: z.enum(['urgent', 'soon', 'later']).optional(),
   deadline: z.string().nullable().optional(),
@@ -234,6 +234,8 @@ export function resolveTaskPriorityScores(params: {
   scheduledEndIso?: string | null;
   isCompletedToday?: boolean;
   dailyBusyMinutesAhead: number;
+  nearTermLoadRatio?: number | null;
+  createdAt?: string | Date | null;
 }): {
   importance: number;
   urgency: number;
@@ -271,7 +273,10 @@ export function resolveTaskPriorityScores(params: {
   }
 
   const timeMode: TimeMode =
-    params.timeMode === 'daily_fixed' || params.timeMode === 'flexible' || params.timeMode === 'deadline'
+    params.timeMode === 'daily_fixed' ||
+    params.timeMode === 'flexible' ||
+    params.timeMode === 'specific_date' ||
+    params.timeMode === 'deadline'
       ? params.timeMode
       : params.deadlineIso
       ? 'deadline'
@@ -297,6 +302,8 @@ export function resolveTaskPriorityScores(params: {
     scheduledEnd: params.scheduledEndIso || null,
     isCompletedToday: params.isCompletedToday,
     dailyBusyMinutesAhead: params.dailyBusyMinutesAhead,
+    nearTermLoadRatio: params.nearTermLoadRatio,
+    createdAt: params.createdAt,
     fallbackUrgency: fallbackUrg100,
   }).urgency;
 

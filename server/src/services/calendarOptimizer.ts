@@ -151,9 +151,11 @@ export function selectCalendarBlocksDetailed(
     } catch {}
     const importance = normalizeScoreTo100(task.importance, task.score_scale) / 100;
     const due = deadlineMs(task.deadline, timezone);
-    const softTargetDue = Number.isFinite(due) && advanceDays > 0
-      ? Math.max(windows[0].start, due - advanceDays * 86400_000)
-      : due;
+    const softTargetDue =
+      Number.isFinite(due) && advanceDays > 0 && task.time_mode !== 'specific_date'
+        ? Math.max(windows[0].start, due - advanceDays * 86400_000)
+        : due;
+    const baseExtra = task.urgency_pace === 'urgent' ? 1 : task.urgency_pace === 'later' ? 0 : task.urgency_pace === 'soon' ? 0.5 : 0;
     return {
       duration,
       plan,
@@ -162,7 +164,8 @@ export function selectCalendarBlocksDetailed(
       due,
       softTargetDue,
       hard: task.deadline_kind === 'hard' && Number.isFinite(due),
-      extra: task.urgency_pace === 'urgent' ? 1 : task.urgency_pace === 'later' ? 0 : task.urgency_pace === 'soon' ? 0.5 : 0,
+      extra: task.time_mode === 'specific_date' ? Math.max(baseExtra, 0.85) : baseExtra,
+      isLaterFlexible: task.time_mode === 'flexible' && task.urgency_pace === 'later',
       missed: task.time_mode === 'daily_fixed' ? recurringDebt(task, new Date(day), timezone) : 0,
     };
   });
@@ -292,8 +295,9 @@ export function selectCalendarBlocksDetailed(
     const progress = items.reduce((sum, item, i) => {
       const before = pressure(i, item.duration, terminal, s.used);
       const after = pressure(i, s.remaining[i], terminal, s.used);
-      // Base 0.6 guarantee ensures scheduling an eligible low-importance task strictly beats idle skipping
-      const value = 0.6 + 2 * item.importance + 0.25 * item.extra + 0.15 * item.missed;
+      // Lower fill incentive for `later` flexible memos so they yield cleanly to real work
+      const baseFill = item.isLaterFlexible ? 0.25 : 0.6;
+      const value = baseFill + 2 * item.importance + 0.25 * item.extra + 0.15 * item.missed;
       return sum + ((s.remaining[i] - item.duration) * value +
         0.5 * (s.remaining[i] * after - item.duration * before)) / BLOCK;
     }, 0);

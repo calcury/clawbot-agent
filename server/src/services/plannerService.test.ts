@@ -2,7 +2,7 @@ import { afterEach, beforeEach, describe, it } from 'node:test';
 import assert from 'node:assert/strict';
 import { db } from '../config/database.js';
 import { setupIsolatedTestEnv, seedTestUser, wallClockIso } from '../testHelpers/testDb.js';
-import { createTaskCommand } from './taskService.js';
+import { createTaskCommand, updateTaskCommand } from './taskService.js';
 import {
   EFFECTIVE_DAILY_CAP_MINUTES,
   extendTaskDuration,
@@ -432,5 +432,58 @@ describe('Batch 2: Planner Commits, Preserved Blocks, Extend Safety, Proposals &
       .prepare("SELECT start_time, end_time FROM schedule_blocks WHERE task_id = ? AND status = 'planned'")
       .get(tLow.task!.id) as { start_time: string; end_time: string };
     assert.ok(new Date(rolledBlock.start_time).getTime() >= afterExpiryNow.getTime());
+  });
+
+  it('specific_date requires target date, pins execution to chosen day, and moves cleanly on update', async () => {
+    const missingDateRes = await createTaskCommand({
+      userId,
+      rawInput: {
+        title: '缺少日期的指定日任务',
+        duration_minutes: 60,
+        time_mode: 'specific_date',
+      },
+    });
+    assert.equal(missingDateRes.success, false);
+    assert.equal(missingDateRes.statusCode, 400);
+
+    const dayPlus3 = addDaysToDateKey(getAccountLocalDateKey(new Date(), 'Asia/Shanghai'), 3);
+    const dayPlus5 = addDaysToDateKey(getAccountLocalDateKey(new Date(), 'Asia/Shanghai'), 5);
+
+    const created = await createTaskCommand({
+      userId,
+      rawInput: {
+        title: '周报整理（指定第3天）',
+        duration_minutes: 60,
+        time_mode: 'specific_date',
+        deadline: `${dayPlus3}T23:59:59`,
+        deadline_kind: 'soft',
+        importance_tier: 'minor',
+      },
+    });
+    assert.equal(created.success, true);
+    assert.equal(created.task?.time_mode, 'specific_date');
+
+    const block1 = db
+      .prepare("SELECT start_time FROM schedule_blocks WHERE task_id = ? AND status = 'planned'")
+      .get(created.task!.id) as { start_time: string };
+    assert.ok(block1);
+    assert.equal(getAccountLocalDateKey(new Date(block1.start_time), 'Asia/Shanghai'), dayPlus3);
+
+    // Move task to dayPlus5 via updateTaskCommand even under today lock
+    db.prepare("UPDATE user_settings SET schedule_lock_mode = 'today' WHERE user_id = ?").run(userId);
+    const updated = await updateTaskCommand({
+      userId,
+      taskId: created.task!.id,
+      rawInput: {
+        time_mode: 'specific_date',
+        deadline: `${dayPlus5}T23:59:59`,
+      },
+    });
+    assert.equal(updated.success, true);
+    const block2 = db
+      .prepare("SELECT start_time FROM schedule_blocks WHERE task_id = ? AND status = 'planned'")
+      .get(created.task!.id) as { start_time: string };
+    assert.ok(block2);
+    assert.equal(getAccountLocalDateKey(new Date(block2.start_time), 'Asia/Shanghai'), dayPlus5);
   });
 });

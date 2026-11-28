@@ -29,7 +29,7 @@ export interface ProposalPayload {
     importance: number;
     importance_tier?: 'vital' | 'support' | 'minor' | null;
     impact_signals?: string[];
-    time_mode?: 'deadline' | 'daily_fixed' | 'flexible';
+    time_mode?: 'deadline' | 'specific_date' | 'daily_fixed' | 'flexible';
     urgency_pace?: 'urgent' | 'soon' | 'later';
     deadline?: string | null;
     deadline_kind?: 'hard' | 'soft';

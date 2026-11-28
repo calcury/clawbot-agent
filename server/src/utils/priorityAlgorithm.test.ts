@@ -174,6 +174,50 @@ describe('calculateDynamicUrgency (多模式 + 日程感知 + 重要度耦合)',
     });
     assert.ok(urgentFlex.urgency >= 80);
     assert.ok(laterFlex.urgency <= 30);
+
+    // 近期负荷高 vs 清闲时：soon 与 later 紧迫度应随近况下调/上浮
+    const soonBusy = calculateDynamicUrgency({
+      timeMode: 'flexible',
+      dueDate: null,
+      urgencyPace: 'soon',
+      importance: 50,
+      nearTermLoadRatio: 0.9,
+      currentTime: now,
+    });
+    const soonIdle = calculateDynamicUrgency({
+      timeMode: 'flexible',
+      dueDate: null,
+      urgencyPace: 'soon',
+      importance: 50,
+      nearTermLoadRatio: 0.1,
+      currentTime: now,
+    });
+    assert.ok(soonBusy.urgency < soonIdle.urgency);
+    assert.match(soonBusy.statusText, /近期较忙/);
+
+    const laterBusy = calculateDynamicUrgency({
+      timeMode: 'flexible',
+      dueDate: null,
+      urgencyPace: 'later',
+      importance: 30,
+      nearTermLoadRatio: 0.85,
+      currentTime: now,
+    });
+    assert.ok(laterBusy.urgency < laterFlex.urgency);
+    assert.match(laterBusy.statusText, /备忘池/);
+
+    // 滞留老化 (Aging) 温和提升紧迫度但不直接变紧急危机
+    const agedLater = calculateDynamicUrgency({
+      timeMode: 'flexible',
+      dueDate: null,
+      urgencyPace: 'later',
+      importance: 30,
+      nearTermLoadRatio: 0.2,
+      createdAt: new Date(now.getTime() - 20 * 86_400_000),
+      currentTime: now,
+    });
+    assert.ok(agedLater.urgency > laterFlex.urgency);
+    assert.ok(agedLater.urgency < PRIORITY_THRESHOLD);
   });
 });
 

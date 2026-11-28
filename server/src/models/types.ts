@@ -171,7 +171,7 @@ export interface Task {
   importance: number; // 0 - 100
   importance_tier?: 'vital' | 'support' | 'minor' | null;
   impact_signals?: string | null; // JSON array of ImpactSignal
-  time_mode?: 'deadline' | 'daily_fixed' | 'flexible' | null;
+  time_mode?: 'deadline' | 'specific_date' | 'daily_fixed' | 'flexible' | null;
   recurrence_rule?: string | null; // JSON string of RecurrenceRule { type: 'daily' | 'weekly', daysOfWeek?: number[] }
   urgency_pace?: 'urgent' | 'soon' | 'later' | null;
   importance_manual_override?: number | null;
@@ -404,7 +404,7 @@ export interface LLMExtractionAction {
   importance?: number | null;
   importance_tier?: 'vital' | 'support' | 'minor' | null;
   impact_signals?: string[] | null;
-  time_mode?: 'deadline' | 'daily_fixed' | 'flexible' | null;
+  time_mode?: 'deadline' | 'specific_date' | 'daily_fixed' | 'flexible' | null;
   recurrence_rule?: string | null; // JSON string of RecurrenceRule { type: 'daily' | 'weekly', daysOfWeek?: number[] }
   urgency_pace?: 'urgent' | 'soon' | 'later' | null;
   deadline?: string | null;

@@ -18,7 +18,7 @@ export interface BackupTaskPayload {
   urgency: number;
   importanceTier?: 'vital' | 'support' | 'minor' | null;
   impactSignals?: string[];
-  timeMode: 'deadline' | 'daily_fixed' | 'flexible';
+  timeMode: 'deadline' | 'specific_date' | 'daily_fixed' | 'flexible';
   recurrenceRule?: string | null;
   urgencyPace?: 'urgent' | 'soon' | 'later';
   importanceManualOverride?: number | null;
@@ -176,9 +176,11 @@ export function normalizeBackupInput(raw: unknown, timezone: string): BackupTask
       const duration = Math.max(1, Math.round(Number(item.durationMinutes ?? item.estimatedMinutes ?? item.duration_minutes ?? 60)));
       const origDuration = Math.max(duration, Math.round(Number(item.originalDurationMinutes ?? item.original_duration_minutes ?? duration)));
       const deadline = normalizeAccountDeadlineIso(item.deadline ?? item.deadlineAt ?? item.dueDate ?? null, timezone);
-      const timeMode: 'deadline' | 'daily_fixed' | 'flexible' =
+      const timeMode: 'deadline' | 'specific_date' | 'daily_fixed' | 'flexible' =
         item.timeMode === 'daily_fixed' || item.time_mode === 'daily_fixed'
           ? 'daily_fixed'
+          : item.timeMode === 'specific_date' || item.time_mode === 'specific_date'
+          ? 'specific_date'
           : item.timeMode === 'flexible' || item.time_mode === 'flexible'
           ? 'flexible'
           : deadline

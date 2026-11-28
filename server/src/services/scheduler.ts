@@ -709,6 +709,21 @@ export function computeTodayBusyMinutes(
   return Math.round(busyMs / 60000);
 }
 
+export function getSpecificExecutionDateKey(
+  task: { time_mode?: string | null; deadline?: string | null },
+  timezone?: string
+): string | null {
+  if (task.time_mode !== 'specific_date' || !task.deadline) return null;
+  const raw = String(task.deadline).trim();
+  if (/^\d{4}-\d{2}-\d{2}$/.test(raw)) return raw;
+  const parsed = parseDeadlineDate(raw, timezone);
+  if (parsed && Number.isFinite(parsed.getTime())) {
+    return timezone ? getAccountLocalDateKey(parsed, timezone) : formatLocalDate(parsed);
+  }
+  const m = raw.match(/^(\d{4}-\d{2}-\d{2})/);
+  return m ? m[1] : null;
+}
+
 export function computeTaskPriorityScore(task: {
   importance: number;
   urgency: number;
@@ -728,6 +743,8 @@ export function computeTaskPriorityScore(task: {
 
   if (task.time_mode === 'daily_fixed') {
     baseScore += 60;
+  } else if (task.time_mode === 'specific_date') {
+    baseScore += 70;
   }
 
   const due = parseDeadlineDate(task.deadline, timezone);
@@ -745,10 +762,17 @@ export function computeTaskPriorityScore(task: {
   return baseScore;
 }
 
-function rejectReasonMessage(code: OptimizerRejectReason | 'q4_filtered', isHard: boolean): string {
+function rejectReasonMessage(
+  code: OptimizerRejectReason | 'q4_filtered' | 'deferred_busy_soon' | 'deferred_later_backlog',
+  isHard: boolean
+): string {
   switch (code) {
     case 'q4_filtered':
       return '象限 IV：默认不自动排程';
+    case 'deferred_busy_soon':
+      return '近期日程较满，近日规划已顺延待排';
+    case 'deferred_later_backlog':
+      return '近期较忙或处于冷却期，暂留「远期备忘」待办池';
     case 'hard_deadline_violation':
       return '不可逾期：截止前尚有未分配工作量';
     case 'outside_work_window':
@@ -998,6 +1022,11 @@ export function runSingleDaySchedule(
 
   const active = tasks.filter(task => {
     if (task.status === 'completed' || task.status === 'cancelled' || targetDateStr < todayStr) return false;
+    if (task.time_mode === 'specific_date') {
+      const specKey = getSpecificExecutionDateKey(task, timezone);
+      if (specKey && targetDateStr < specKey) return false;
+      if (specKey && task.deadline_kind === 'hard' && targetDateStr > specKey) return false;
+    }
     if (task.time_mode === 'daily_fixed') {
       if (!options.allowFutureDailyInstances && targetDateStr !== todayStr) return false;
       if (!isDateMatchingRecurrence(targetDateStr, task.recurrence_rule)) return false;
@@ -1006,7 +1035,7 @@ export function runSingleDaySchedule(
       } catch {}
     }
     const quadrant = calculateQuadrant(task.importance, task.urgency, task.score_scale);
-    if (autoFilterQ4 && quadrant === 'q4' && task.deadline_kind !== 'hard') {
+    if (autoFilterQ4 && quadrant === 'q4' && task.deadline_kind !== 'hard' && task.time_mode !== 'specific_date') {
       unscheduledTaskIds.push({
         taskId: task.id,
         remainingMinutes: task.duration_minutes || 45,
@@ -1108,8 +1137,70 @@ function getHorizonWindows(
   });
 }
 
+function sumWindowMinutes(windows: Window[]): number {
+  return windows.reduce((sum, w) => sum + Math.max(0, Math.floor((w.end - w.start) / 60_000)), 0);
+}
+
+function getTaskAgeDays(createdAt: string | null | undefined, now: Date): number {
+  if (!createdAt) return 0;
+  const ms = new Date(createdAt).getTime();
+  if (!Number.isFinite(ms) || ms >= now.getTime()) return 0;
+  return (now.getTime() - ms) / 86_400_000;
+}
+
+interface HorizonDayStats {
+  unblockedWorkMins: number[];
+  fixedInWorkMins: number[];
+  dayMovableUsed: number[];
+  baseCap: number;
+}
+
+function computeHorizonDayStats(
+  horizonWindows: Window[][],
+  unblockedHorizonWindows: Window[][],
+  dayKeys: string[],
+  baseCap: number,
+  occupiedDailyMinutes?: Map<string, number>
+): HorizonDayStats {
+  const unblockedWorkMins = unblockedHorizonWindows.map(sumWindowMinutes);
+  const freeAfterFixedMins = horizonWindows.map(sumWindowMinutes);
+  const fixedInWorkMins = unblockedWorkMins.map((u, idx) => Math.max(0, u - (freeAfterFixedMins[idx] || 0)));
+  const dayMovableUsed = dayKeys.map(dk => occupiedDailyMinutes?.get(dk) || 0);
+  return { unblockedWorkMins, fixedInWorkMins, dayMovableUsed, baseCap };
+}
+
+function getDayDenomMinutes(stats: HorizonDayStats, dOffset: number): number {
+  const unblocked = stats.unblockedWorkMins[dOffset] || 0;
+  if (unblocked <= 0) return 0;
+  const fixed = stats.fixedInWorkMins[dOffset] || 0;
+  return Math.max(30, Math.min(unblocked, stats.baseCap + fixed));
+}
+
+function getDayOccupancyRatio(stats: HorizonDayStats, dOffset: number): number {
+  const denom = getDayDenomMinutes(stats, dOffset);
+  if (denom <= 0) return 1;
+  const busy = (stats.fixedInWorkMins[dOffset] || 0) + (stats.dayMovableUsed[dOffset] || 0);
+  return Math.min(1, Math.max(0, busy / denom));
+}
+
+function getRangeOccupancyRatio(stats: HorizonDayStats, startOffset: number, count: number): number {
+  const end = Math.min(stats.unblockedWorkMins.length, startOffset + count);
+  let busySum = 0;
+  let denomSum = 0;
+  for (let d = startOffset; d < end; d++) {
+    const denom = getDayDenomMinutes(stats, d);
+    if (denom <= 0) continue;
+    denomSum += denom;
+    busySum += Math.min(denom, (stats.fixedInWorkMins[d] || 0) + (stats.dayMovableUsed[d] || 0));
+  }
+  return denomSum > 0 ? Math.min(1, busySum / denomSum) : 0;
+}
+
 /**
- * 在多日规划窗口内为同轨待办执行滚动排程
+ * 在多日规划窗口内为同轨待办执行分阶段负荷感知滚动排程：
+ * Tier 1: 有截止日 / 指定执行日 / 周期任务 / 尽快推进(urgent) 弹性任务
+ * Tier 2A: 近日规划(soon) — 依据近3日忙碌度自适应顺延并保留约 25% 喘息余量
+ * Tier 2B: 远期备忘(later, 方案A) — 冷却期后仅在近期宽松日低密度顺手排入，忙时留存待办池
  */
 export function scheduleTaskGroupInHorizon(
   groupTasks: Task[],
@@ -1146,108 +1237,262 @@ export function scheduleTaskGroupInHorizon(
   const scale = Math.max(1, ...balances.map(balance => Math.abs(balance) / 120));
   const allocationDebt = new Map(groupTasks.map((task, index) => [task.id, balances[index] / scale]));
 
-  const horizonWindows = getHorizonWindows(now, horizonDays, fixedEvents, {
+  const windowOpts = {
     timezone: config.timezone,
     workStartHour: config.workStartHour,
     workEndHour: config.workEndHour,
     workWindows: config.workWindows,
     bufferMinutes: config.bufferMinutes,
     releaseTimeMs: config.releaseTimeMsToday,
-  });
+  };
+  const horizonWindows = getHorizonWindows(now, horizonDays, fixedEvents, windowOpts);
+  const unblockedHorizonWindows = getHorizonWindows(now, horizonDays, [], windowOpts);
 
   const baseKey = config.timezone ? getAccountLocalDateKey(now, config.timezone) : null;
-
+  const dayDates: Date[] = [];
+  const dayKeys: string[] = [];
   for (let dayOffset = 0; dayOffset < horizonDays; dayOffset++) {
-    let targetDate: Date;
-    if (config.timezone && baseKey) {
-      const dk = addDaysToDateKey(baseKey, dayOffset);
-      targetDate = zonedWallClockToUtc(dk, 0, 0, 0, 0, config.timezone);
-    } else {
-      targetDate = new Date(now);
-      targetDate.setDate(targetDate.getDate() + dayOffset);
-    }
-
-    const dkForCap = config.timezone && baseKey ? addDaysToDateKey(baseKey, dayOffset) : formatLocalDate(targetDate);
-    const onceCandidates = Array.from(remainingTaskIds)
-      .map(id => taskMap.get(id)!)
-      .filter(Boolean);
-    const dayRecurringEntries = recurringByDate?.get(dkForCap) || [];
-    const dayRecurringTaskIdToInstanceId = new Map<number, number>(
-      dayRecurringEntries.map(e => [e.task.id, e.instanceId])
+    const dk = config.timezone && baseKey ? addDaysToDateKey(baseKey, dayOffset) : (() => {
+      const d = new Date(now);
+      d.setDate(d.getDate() + dayOffset);
+      return formatLocalDate(d);
+    })();
+    dayKeys.push(dk);
+    dayDates.push(
+      config.timezone && baseKey
+        ? zonedWallClockToUtc(dk, 0, 0, 0, 0, config.timezone)
+        : (() => {
+            const d = new Date(now);
+            d.setDate(d.getDate() + dayOffset);
+            return d;
+          })()
     );
-    const candidates = [...onceCandidates, ...dayRecurringEntries.map(e => e.task)];
-    if (candidates.length === 0) {
-      if (!hasRecurring) break;
-      continue;
+  }
+
+  const baseCap = config.exactDailyCapMinutes ?? EFFECTIVE_DAILY_CAP_MINUTES;
+  const stats = computeHorizonDayStats(
+    horizonWindows,
+    unblockedHorizonWindows,
+    dayKeys,
+    baseCap,
+    occupiedDailyMinutes
+  );
+
+  // Track placed blocks as busy events for subsequent passes so Tier 2 never overlaps Tier 1 / 2A blocks
+  const dynamicBusyEvents: FixedCalendarBlock[] = [...fixedEvents];
+
+  const coreIds = new Set<number>();
+  const soonIds = new Set<number>();
+  const laterIds = new Set<number>();
+  for (const t of groupTasks) {
+    if (t.time_mode === 'flexible' && t.urgency_pace === 'later') {
+      laterIds.add(t.id);
+    } else if (t.time_mode === 'flexible' && t.urgency_pace !== 'urgent') {
+      soonIds.add(t.id);
+    } else {
+      coreIds.add(t.id);
     }
+  }
 
-    const alreadyUsed = occupiedDailyMinutes?.get(dkForCap) || 0;
-    const baseCap = config.exactDailyCapMinutes ?? EFFECTIVE_DAILY_CAP_MINUTES;
-    const dayCap = Math.max(0, baseCap - alreadyUsed);
-
-    const dayResult = runSingleDaySchedule(candidates, fixedEvents, {
-      targetDate,
-      now,
-      timezone: config.timezone,
-      workStartHour: config.workStartHour,
-      workEndHour: config.workEndHour,
-      workWindows: config.workWindows,
-      bufferMinutes: config.bufferMinutes,
-      taskRestMinutes: 10,
-      maxContinuousMinutes: 90,
-      maxDailyTaskMinutes: 330,
-      exactDailyCapMinutes: dayCap,
-      autoFilterQ4: false,
-      lunchStartHour: 12.0,
-      lunchEndHour: 13.0,
-      dinnerStartHour: 18.0,
-      dinnerEndHour: 19.0,
-      minChunkMinutes: 30,
-      allowSplit: true,
-      allowFutureDailyInstances: true,
-      advanceDeadlineDays: config.advanceDeadlineDays,
-      releaseTimeMs: dayOffset === 0 ? config.releaseTimeMsToday : undefined,
-      allocationDebt,
-      futureWindows: horizonWindows.slice(dayOffset + 1).flat(),
-    });
-
-    for (const block of dayResult.scheduledBlocks) {
-      const recInstanceId = dayRecurringTaskIdToInstanceId.get(block.taskId);
-      if (recInstanceId !== undefined) {
-        if (recurringAllocations) {
-          if (!recurringAllocations.has(recInstanceId)) {
-            recurringAllocations.set(recInstanceId, []);
-          }
-          recurringAllocations.get(recInstanceId)!.push(block);
-        }
-      } else {
-        if (!taskAllocations.has(block.taskId)) {
-          taskAllocations.set(block.taskId, []);
-        }
-        taskAllocations.get(block.taskId)!.push(block);
-      }
-    }
-
-    for (const scheduledId of dayResult.scheduledTaskIds) {
-      if (!dayRecurringTaskIdToInstanceId.has(scheduledId)) {
-        remainingTaskIds.delete(scheduledId);
-      }
-    }
-
-    for (const unsched of dayResult.unscheduledTaskIds) {
-      const recInstanceId = dayRecurringTaskIdToInstanceId.get(unsched.taskId);
-      if (recInstanceId !== undefined) {
-        recurringRejectByInstance?.set(recInstanceId, { code: unsched.reasonCode, text: unsched.reason });
+  const runTierPass = (params: {
+    tierTaskIds: Set<number>;
+    includeRecurring: boolean;
+    minDayOffset?: number;
+    prepareDay?: (dayOffset: number, candidateTasks: Task[], dayCapRemaining: number) => {
+      admittedTasks: Task[];
+      capOverride: number;
+    };
+  }) => {
+    const startDay = params.minDayOffset ?? 0;
+    for (let dayOffset = startDay; dayOffset < horizonDays; dayOffset++) {
+      const targetDate = dayDates[dayOffset];
+      const dkForCap = dayKeys[dayOffset];
+      const onceCandidates = Array.from(params.tierTaskIds)
+        .filter(id => remainingTaskIds.has(id))
+        .map(id => taskMap.get(id)!)
+        .filter(Boolean);
+      const dayRecurringEntries = params.includeRecurring ? (recurringByDate?.get(dkForCap) || []) : [];
+      const dayRecurringTaskIdToInstanceId = new Map<number, number>(
+        dayRecurringEntries.map(e => [e.task.id, e.instanceId])
+      );
+      const rawCandidates = [...onceCandidates, ...dayRecurringEntries.map(e => e.task)];
+      if (rawCandidates.length === 0) {
+        if (!params.includeRecurring) break;
         continue;
       }
-      rejectReasonByTaskId?.set(unsched.taskId, { code: unsched.reasonCode, text: unsched.reason });
-      if (unsched.reasonCode !== 'q4_filtered') {
-        const tRef = taskMap.get(unsched.taskId);
-        if (tRef) {
-          tRef.duration_minutes = unsched.remainingMinutes;
+
+      const dayCapRemaining = Math.max(0, baseCap - (stats.dayMovableUsed[dayOffset] || 0));
+      let candidates = rawCandidates;
+      let effectiveDayCap = dayCapRemaining;
+
+      if (params.prepareDay) {
+        const prep = params.prepareDay(dayOffset, rawCandidates, dayCapRemaining);
+        candidates = prep.admittedTasks;
+        effectiveDayCap = Math.max(0, Math.min(dayCapRemaining, prep.capOverride));
+      }
+
+      if (candidates.length === 0 || effectiveDayCap <= 0) {
+        continue;
+      }
+
+      const futureWins =
+        params.prepareDay
+          ? horizonWindows.slice(dayOffset + 1).flat()
+          : horizonWindows.slice(dayOffset + 1).flat();
+
+      const dayResult = runSingleDaySchedule(candidates, dynamicBusyEvents, {
+        targetDate,
+        now,
+        timezone: config.timezone,
+        workStartHour: config.workStartHour,
+        workEndHour: config.workEndHour,
+        workWindows: config.workWindows,
+        bufferMinutes: config.bufferMinutes,
+        taskRestMinutes: 10,
+        maxContinuousMinutes: 90,
+        maxDailyTaskMinutes: 330,
+        exactDailyCapMinutes: effectiveDayCap,
+        autoFilterQ4: false,
+        lunchStartHour: 12.0,
+        lunchEndHour: 13.0,
+        dinnerStartHour: 18.0,
+        dinnerEndHour: 19.0,
+        minChunkMinutes: 30,
+        allowSplit: true,
+        allowFutureDailyInstances: true,
+        advanceDeadlineDays: config.advanceDeadlineDays,
+        releaseTimeMs: dayOffset === 0 ? config.releaseTimeMsToday : undefined,
+        allocationDebt,
+        futureWindows: futureWins,
+      });
+
+      for (const block of dayResult.scheduledBlocks) {
+        stats.dayMovableUsed[dayOffset] = (stats.dayMovableUsed[dayOffset] || 0) + block.durationMinutes;
+        dynamicBusyEvents.push({
+          id: `placed-${block.id}`,
+          title: block.title,
+          start: block.start,
+          end: block.end,
+          isAllDay: false,
+        });
+
+        const recInstanceId = dayRecurringTaskIdToInstanceId.get(block.taskId);
+        if (recInstanceId !== undefined) {
+          if (recurringAllocations) {
+            if (!recurringAllocations.has(recInstanceId)) {
+              recurringAllocations.set(recInstanceId, []);
+            }
+            recurringAllocations.get(recInstanceId)!.push(block);
+          }
+        } else {
+          if (!taskAllocations.has(block.taskId)) {
+            taskAllocations.set(block.taskId, []);
+          }
+          taskAllocations.get(block.taskId)!.push(block);
         }
-      } else {
-        remainingTaskIds.delete(unsched.taskId);
+      }
+
+      for (const scheduledId of dayResult.scheduledTaskIds) {
+        if (!dayRecurringTaskIdToInstanceId.has(scheduledId)) {
+          remainingTaskIds.delete(scheduledId);
+        }
+      }
+
+      for (const unsched of dayResult.unscheduledTaskIds) {
+        const recInstanceId = dayRecurringTaskIdToInstanceId.get(unsched.taskId);
+        if (recInstanceId !== undefined) {
+          recurringRejectByInstance?.set(recInstanceId, { code: unsched.reasonCode, text: unsched.reason });
+          continue;
+        }
+        rejectReasonByTaskId?.set(unsched.taskId, { code: unsched.reasonCode, text: unsched.reason });
+        if (unsched.reasonCode !== 'q4_filtered') {
+          const tRef = taskMap.get(unsched.taskId);
+          if (tRef) {
+            tRef.duration_minutes = unsched.remainingMinutes;
+          }
+        } else {
+          remainingTaskIds.delete(unsched.taskId);
+        }
+      }
+    }
+  };
+
+  // Tier 1: Dated, recurring, and urgent flexible tasks
+  if (coreIds.size > 0 || hasRecurring) {
+    runTierPass({ tierTaskIds: coreIds, includeRecurring: hasRecurring });
+  }
+
+  // Tier 2A: Flexible `soon` ("近日规划") — adapts start day and preserves ~25% breathing slack when busy
+  if (soonIds.size > 0) {
+    const near3dLoad = getRangeOccupancyRatio(stats, 0, 3);
+    runTierPass({
+      tierTaskIds: soonIds,
+      includeRecurring: false,
+      prepareDay: (dayOffset, candidateTasks, dayCapRemaining) => {
+        const dayOcc = getDayOccupancyRatio(stats, dayOffset);
+        const denom = getDayDenomMinutes(stats, dayOffset);
+        let maxCeiling = 0;
+        const admitted: Task[] = [];
+        for (const task of candidateTasks) {
+          const ageDays = getTaskAgeDays(task.created_at, now);
+          const taskCeiling = ageDays >= 7 ? 0.85 : 0.75;
+          if (dayOffset < 2 && ageDays < 7 && (near3dLoad >= 0.65 || dayOcc >= 0.55)) {
+            continue;
+          }
+          if (dayOcc >= taskCeiling) continue;
+          admitted.push(task);
+          maxCeiling = Math.max(maxCeiling, taskCeiling);
+        }
+        if (admitted.length === 0 || denom <= 0) {
+          return { admittedTasks: [], capOverride: 0 };
+        }
+        const currentBusy = (stats.fixedInWorkMins[dayOffset] || 0) + (stats.dayMovableUsed[dayOffset] || 0);
+        const slackAllowance = Math.max(0, Math.floor(denom * maxCeiling - currentBusy));
+        return { admittedTasks: admitted, capOverride: Math.min(dayCapRemaining, slackAllowance) };
+      },
+    });
+    for (const id of soonIds) {
+      if (remainingTaskIds.has(id) && !rejectReasonByTaskId?.has(id)) {
+        rejectReasonByTaskId?.set(id, {
+          code: 'deferred_busy_soon',
+          text: rejectReasonMessage('deferred_busy_soon', false),
+        });
+      }
+    }
+  }
+
+  // Tier 2B: Flexible `later` ("远期备忘", Plan A) — 3-day cool-off + low-load admission with 55% ceiling
+  if (laterIds.size > 0) {
+    const minLaterOffset = horizonDays > 3 ? 3 : 0;
+    runTierPass({
+      tierTaskIds: laterIds,
+      includeRecurring: false,
+      minDayOffset: minLaterOffset,
+      prepareDay: (dayOffset, candidateTasks, dayCapRemaining) => {
+        const near7dLoad = getRangeOccupancyRatio(stats, 0, 7);
+        const dayOcc = getDayOccupancyRatio(stats, dayOffset);
+        const denom = getDayDenomMinutes(stats, dayOffset);
+        const admitted = candidateTasks.filter(task => {
+          const ageDays = getTaskAgeDays(task.created_at, now);
+          if (ageDays >= 14) {
+            return dayOcc < 0.35;
+          }
+          return near7dLoad < 0.45 && dayOcc < 0.40;
+        });
+        if (admitted.length === 0 || denom <= 0) {
+          return { admittedTasks: [], capOverride: 0 };
+        }
+        const currentBusy = (stats.fixedInWorkMins[dayOffset] || 0) + (stats.dayMovableUsed[dayOffset] || 0);
+        const slackAllowance = Math.max(0, Math.floor(denom * 0.55 - currentBusy));
+        return { admittedTasks: admitted, capOverride: Math.min(dayCapRemaining, slackAllowance) };
+      },
+    });
+    for (const id of laterIds) {
+      if (remainingTaskIds.has(id)) {
+        rejectReasonByTaskId?.set(id, {
+          code: 'deferred_later_backlog',
+          text: rejectReasonMessage('deferred_later_backlog', false),
+        });
       }
     }
   }
@@ -1370,6 +1615,30 @@ export function replanUserTasks(
     const todayBusyMinutes = computeTodayBusyMinutes(userId, now);
     const taskTitlesById = new Map<number, string>();
 
+    // Estimate 3-day horizon load ratio from external events & committed/dated active work for flexible urgency modulation
+    const threeDaysMs = now.getTime() + 3 * 86_400_000;
+    const extBusy3dMins = externalBusy.reduce((sum, ev) => {
+      const s = Math.max(now.getTime(), ev.start.getTime());
+      const e = Math.min(threeDaysMs, ev.end.getTime());
+      return e > s ? sum + (e - s) / 60_000 : sum;
+    }, 0);
+    const datedDemand3dMins = activeInstances.reduce((sum, row) => {
+      if (row.time_mode === 'flexible' && row.urgency_pace !== 'urgent') return sum;
+      if (row.time_mode === 'daily_fixed') {
+        if (row.business_date > addDaysToDateKey(todayKey, 2) || !isDateMatchingRecurrence(row.business_date, row.recurrence_rule)) {
+          return sum;
+        }
+      } else if (row.deadline) {
+        const dueD = parseDeadlineDate(row.deadline, tz);
+        if (dueD && dueD.getTime() > threeDaysMs) return sum;
+      }
+      return sum + Math.max(0, row.estimated_minutes - row.completed_minutes);
+    }, 0);
+    const baselineNearTermLoadRatio = Math.min(
+      1,
+      Math.max(0, (extBusy3dMins + datedDemand3dMins) / (3 * EFFECTIVE_DAILY_CAP_MINUTES))
+    );
+
     const exclusiveFixedBusy: FixedCalendarBlock[] = [...externalBusy];
     const concurrentFixedBusy: FixedCalendarBlock[] = [];
     const lockUntil = computeScheduleLockUntil(settings, now, tz);
@@ -1411,6 +1680,8 @@ export function replanUserTasks(
         scheduledEnd: lastBlock?.end_time || null,
         isCompletedToday: false,
         dailyBusyMinutesAhead: todayBusyMinutes,
+        nearTermLoadRatio: baselineNearTermLoadRatio,
+        createdAt: row.task_created_at,
         workEndHour,
         currentTime: now,
       });
@@ -1693,10 +1964,16 @@ export function replanUserTasks(
         partialCount++;
       } else {
         planStatus = 'pending';
-        planReason =
-          row.deadline_kind === 'hard' && rejectInfo?.code !== 'q4_filtered'
-            ? '不可逾期：截止前容量不足，未能完整排入'
-            : rejectInfo?.text || '暂无合适空闲时段';
+        const specKey = getSpecificExecutionDateKey(row, tz);
+        const horizonEndKey = addDaysToDateKey(todayKey, horizonDays - 1);
+        if (specKey && specKey > horizonEndKey) {
+          planReason = `计划于 ${specKey} 执行（暂未进入近 ${horizonDays} 天排程窗口）`;
+        } else {
+          planReason =
+            row.deadline_kind === 'hard' && rejectInfo?.code !== 'q4_filtered'
+              ? '不可逾期：截止前容量不足，未能完整排入'
+              : rejectInfo?.text || '暂无合适空闲时段';
+        }
         failedCount++;
       }
 
@@ -1853,7 +2130,7 @@ function simulateTaskInHorizon(
   };
 
   const simQuad = calculateQuadrant(task.importance, task.urgency, task.score_scale);
-  if (simQuad === 'q4' && task.deadline_kind !== 'hard') {
+  if (simQuad === 'q4' && task.deadline_kind !== 'hard' && task.time_mode !== 'specific_date' && task.time_mode !== 'flexible') {
     return {
       success: false,
       reasonCode: 'q4_filtered',
@@ -1869,25 +2146,59 @@ function simulateTaskInHorizon(
   const accumulatedBlocks: ScheduledTaskBlock[] = [];
   let remainingMinutesToSim = task.duration_minutes;
   const maxDays = task.time_mode === 'daily_fixed' ? 1 : 14;
-  const horizonWindows = getHorizonWindows(now, maxDays, fixedEvents, {
+  const simWindowOpts = {
     timezone: tz,
     workStartHour,
     workEndHour,
     workWindows,
     bufferMinutes,
     releaseTimeMs: releaseTimeMsToday,
-  });
+  };
+  const horizonWindows = getHorizonWindows(now, maxDays, fixedEvents, simWindowOpts);
+  const unblockedHorizonWindows = getHorizonWindows(now, maxDays, [], simWindowOpts);
 
   const baseKey = getAccountLocalDateKey(now, tz);
-  let lastReasonCode = 'insufficient_capacity';
+  const dayKeysSim = Array.from({ length: maxDays }, (_, i) => addDaysToDateKey(baseKey, i));
+  const simStats = computeHorizonDayStats(
+    horizonWindows,
+    unblockedHorizonWindows,
+    dayKeysSim,
+    EFFECTIVE_DAILY_CAP_MINUTES,
+    occupiedDailyMinutes
+  );
+  const near3dSimLoad = getRangeOccupancyRatio(simStats, 0, 3);
+  const near7dSimLoad = getRangeOccupancyRatio(simStats, 0, 7);
+  const isDeferredSoonFlex = task.time_mode === 'flexible' && task.urgency_pace !== 'urgent' && task.urgency_pace !== 'later';
+  const isDeferredLaterFlex = task.time_mode === 'flexible' && task.urgency_pace === 'later';
+  let lastReasonCode = isDeferredLaterFlex
+    ? 'deferred_later_backlog'
+    : isDeferredSoonFlex
+    ? 'deferred_busy_soon'
+    : 'insufficient_capacity';
 
-  for (let dayOffset = 0; dayOffset < maxDays; dayOffset++) {
+  for (let dayOffset = isDeferredLaterFlex && maxDays > 3 ? 3 : 0; dayOffset < maxDays; dayOffset++) {
     if (remainingMinutesToSim <= 0) break;
-    const dayKey = addDaysToDateKey(baseKey, dayOffset);
+    const dayKey = dayKeysSim[dayOffset];
+    const specKey = getSpecificExecutionDateKey(simTask, tz);
+    if (specKey && dayKey < specKey) continue;
+    if (specKey && simTask.deadline_kind === 'hard' && dayKey > specKey) continue;
     const targetDate = zonedWallClockToUtc(dayKey, 0, 0, 0, 0, tz);
 
-    const usedOnDay = occupiedDailyMinutes?.get(dayKey) || 0;
-    const remainingCapMinutes = Math.max(0, EFFECTIVE_DAILY_CAP_MINUTES - usedOnDay);
+    const dayOcc = getDayOccupancyRatio(simStats, dayOffset);
+    const denom = getDayDenomMinutes(simStats, dayOffset);
+    let remainingCapMinutes = Math.max(0, EFFECTIVE_DAILY_CAP_MINUTES - (simStats.dayMovableUsed[dayOffset] || 0));
+
+    if (isDeferredSoonFlex) {
+      if (dayOffset < 2 && (near3dSimLoad >= 0.65 || dayOcc >= 0.55)) continue;
+      if (dayOcc >= 0.75 || denom <= 0) continue;
+      const busyOnDay = (simStats.fixedInWorkMins[dayOffset] || 0) + (simStats.dayMovableUsed[dayOffset] || 0);
+      remainingCapMinutes = Math.min(remainingCapMinutes, Math.max(0, Math.floor(denom * 0.75 - busyOnDay)));
+    } else if (isDeferredLaterFlex) {
+      if (near7dSimLoad >= 0.45 || dayOcc >= 0.40 || denom <= 0) continue;
+      const busyOnDay = (simStats.fixedInWorkMins[dayOffset] || 0) + (simStats.dayMovableUsed[dayOffset] || 0);
+      remainingCapMinutes = Math.min(remainingCapMinutes, Math.max(0, Math.floor(denom * 0.55 - busyOnDay)));
+    }
+
     if (remainingCapMinutes <= 0) continue;
 
     simTask.duration_minutes = remainingMinutesToSim;
@@ -1958,7 +2269,7 @@ function simulateTaskInHorizon(
     message:
       task.deadline_kind === 'hard'
         ? '排程窗口内未找到能在硬截止前完整完成的方案。'
-        : rejectReasonMessage(lastReasonCode as OptimizerRejectReason, false),
+        : rejectReasonMessage(lastReasonCode as any, false),
     accumulatedBlocks: [],
   };
 }

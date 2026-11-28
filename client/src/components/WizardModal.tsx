@@ -21,6 +21,7 @@ import {
   Clock,
   Cpu,
   Repeat,
+  Target,
   Infinity as InfinityIcon,
 } from 'lucide-react';
 import { useTheme } from '../context/ThemeContext';
@@ -75,7 +76,10 @@ export const WizardModal: React.FC<WizardModalProps> = ({
   });
   const importance = impResult.importance;
 
-  const effectiveDueDate = timeMode === 'deadline' ? dueDate || formatLocalDate(new Date()) : null;
+  const effectiveDueDate =
+    timeMode === 'deadline' || timeMode === 'specific_date'
+      ? dueDate || formatLocalDate(new Date())
+      : null;
   const algoResult = calculateDynamicUrgency({
     timeMode,
     dueDate: effectiveDueDate,
@@ -115,7 +119,7 @@ export const WizardModal: React.FC<WizardModalProps> = ({
   const handleFinalSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     if (!taskTitle.trim() || !importanceTier) return;
-    if (timeMode === 'deadline' && !effectiveDueDate) return;
+    if ((timeMode === 'deadline' || timeMode === 'specific_date') && !effectiveDueDate) return;
 
     onConfirmTask({
       title: taskTitle.trim(),
@@ -275,7 +279,7 @@ export const WizardModal: React.FC<WizardModalProps> = ({
                 </h3>
               </div>
 
-              <div className="grid grid-cols-3 gap-1.5 p-1 rounded-xl bg-gray-100 dark:bg-neutral-800">
+              <div className="grid grid-cols-2 sm:grid-cols-4 gap-1.5 p-1 rounded-xl bg-gray-100 dark:bg-neutral-800">
                 <button
                   type="button"
                   onClick={() => setTimeMode('deadline')}
@@ -286,6 +290,17 @@ export const WizardModal: React.FC<WizardModalProps> = ({
                   }`}
                 >
                   <Calendar className="h-3 w-3" /> {t('task.type_deadline', '截止日期')}
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setTimeMode('specific_date')}
+                  className={`flex items-center justify-center gap-1 py-1.5 rounded-lg text-[11px] font-medium cursor-pointer ${
+                    timeMode === 'specific_date'
+                      ? 'bg-white dark:bg-[#28292a] text-blue-600 dark:text-blue-400 font-semibold shadow-2xs'
+                      : 'text-gray-600 dark:text-neutral-400'
+                  }`}
+                >
+                  <Target className="h-3 w-3" /> {t('task.type_specific_date', '指定执行日')}
                 </button>
                 <button
                   type="button"
@@ -312,12 +327,15 @@ export const WizardModal: React.FC<WizardModalProps> = ({
               </div>
 
               <div className="p-3.5 rounded-xl bg-gray-50 dark:bg-neutral-800/40 border border-gray-200/80 dark:border-neutral-800 space-y-3">
-                {timeMode === 'deadline' && (
+                {(timeMode === 'deadline' || timeMode === 'specific_date') && (
                   <>
                     <div className="grid grid-cols-2 gap-3">
                       <div>
                         <label className="block text-xs font-semibold text-gray-700 dark:text-neutral-300 mb-1">
-                          {t('task.deadline_date', '截止日期')} <span className="text-rose-500">*</span>
+                          {timeMode === 'specific_date'
+                            ? t('task.execution_date', '执行日期')
+                            : t('task.deadline_date', '截止日期')}{' '}
+                          <span className="text-rose-500">*</span>
                         </label>
                         <input
                           type="date"

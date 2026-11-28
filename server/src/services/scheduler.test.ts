@@ -13,6 +13,7 @@ import {
   scheduleTaskGroupInHorizon,
   splitIntoFocusSessions,
   taskToBusyEvents,
+  getSpecificExecutionDateKey,
 } from './scheduler.js';
 import { findDueReminderBlockIndex } from './reminder.js';
 
@@ -606,4 +607,210 @@ test('computeScheduleLockUntil and isScheduleBlockTimeLocked handle rolling hour
     false
   );
 });
+
+test('specific_date tasks are scheduled only on (and not before) their target execution date', () => {
+  const baseNow = new Date('2026-12-01T00:00:00.000Z'); // 08:00 Asia/Shanghai
+  const specTask = makeTask({
+    id: 201,
+    title: '周四执行汇报',
+    time_mode: 'specific_date',
+    deadline: '2026-12-03T15:59:59.999Z', // 2026-12-03 23:59:59 Asia/Shanghai
+    deadline_kind: 'soft',
+    duration_minutes: 60,
+    importance: 60,
+    urgency: 40,
+  });
+
+  assert.equal(getSpecificExecutionDateKey(specTask, 'Asia/Shanghai'), '2026-12-03');
+
+  const allocations = new Map();
+  const remaining = new Set<number>([201]);
+  scheduleTaskGroupInHorizon(
+    [specTask],
+    [],
+    baseNow,
+    5,
+    {
+      timezone: 'Asia/Shanghai',
+      workStartHour: 9,
+      workEndHour: 18,
+      workWindows: [{ startHour: 9, endHour: 18 }],
+      bufferMinutes: 10,
+      advanceDeadlineDays: 2,
+      releaseTimeMsToday: baseNow.getTime(),
+    },
+    allocations,
+    remaining
+  );
+
+  const placed = allocations.get(201) || [];
+  assert.equal(placed.length, 1);
+  assert.equal(remaining.has(201), false);
+  // Placed strictly on 2026-12-03 (never pulled earlier to Dec 1 or Dec 2 despite advanceDeadlineDays=2)
+  const placedDateKey = new Intl.DateTimeFormat('en-CA', {
+    timeZone: 'Asia/Shanghai',
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit',
+  }).format(placed[0].start);
+  assert.equal(placedDateKey, '2026-12-03');
+
+  // Strict same-day (`hard`) task when target day is completely blocked does not spill to next day
+  const hardSpecTask = makeTask({
+    id: 202,
+    title: '严格周四处理',
+    time_mode: 'specific_date',
+    deadline: '2026-12-03T15:59:59.999Z',
+    deadline_kind: 'hard',
+    duration_minutes: 60,
+    importance: 75,
+    urgency: 60,
+  });
+  const dec3FullBusy = [
+    {
+      id: 'busy-dec3',
+      title: 'Full Day Meeting',
+      start: new Date('2026-12-03T00:00:00.000Z'),
+      end: new Date('2026-12-03T14:00:00.000Z'),
+      isAllDay: false,
+    },
+  ];
+  const hardAlloc = new Map();
+  const hardRem = new Set<number>([202]);
+  scheduleTaskGroupInHorizon(
+    [hardSpecTask],
+    dec3FullBusy,
+    baseNow,
+    5,
+    {
+      timezone: 'Asia/Shanghai',
+      workStartHour: 9,
+      workEndHour: 18,
+      workWindows: [{ startHour: 9, endHour: 18 }],
+      bufferMinutes: 0,
+      advanceDeadlineDays: 1,
+      releaseTimeMsToday: baseNow.getTime(),
+    },
+    hardAlloc,
+    hardRem
+  );
+  assert.equal((hardAlloc.get(202) || []).length, 0);
+  assert.equal(hardRem.has(202), true);
+});
+
+test('flexible Plan A cool-off & workload-aware admission protects today and keeps later memos in backlog when busy', () => {
+  const baseNow = new Date('2026-12-01T00:00:00.000Z'); // 08:00 Asia/Shanghai
+  const dateKeyInSh = (d: Date) =>
+    new Intl.DateTimeFormat('en-CA', {
+      timeZone: 'Asia/Shanghai',
+      year: 'numeric',
+      month: '2-digit',
+      day: '2-digit',
+    }).format(d);
+
+  // Case 1: Idle 7-day calendar -> `later` respects 3-day cool-off (>= 2026-12-04) instead of filling today (2026-12-01)
+  const laterTask = makeTask({
+    id: 301,
+    title: '整理相册(远期)',
+    time_mode: 'flexible',
+    urgency_pace: 'later',
+    duration_minutes: 60,
+    importance: 25,
+    urgency: 25,
+    created_at: baseNow.toISOString(),
+  });
+  const urgentFlexTask = makeTask({
+    id: 302,
+    title: '紧急修补(尽快推进)',
+    time_mode: 'flexible',
+    urgency_pace: 'urgent',
+    duration_minutes: 60,
+    importance: 80,
+    urgency: 80,
+    created_at: baseNow.toISOString(),
+  });
+
+  const idleAlloc = new Map();
+  const idleRem = new Set<number>([301, 302]);
+  scheduleTaskGroupInHorizon(
+    [laterTask, urgentFlexTask],
+    [],
+    baseNow,
+    7,
+    {
+      timezone: 'Asia/Shanghai',
+      workStartHour: 9,
+      workEndHour: 18,
+      workWindows: [{ startHour: 9, endHour: 18 }],
+      bufferMinutes: 0,
+      advanceDeadlineDays: 1,
+      releaseTimeMsToday: baseNow.getTime(),
+    },
+    idleAlloc,
+    idleRem
+  );
+
+  assert.equal(dateKeyInSh(idleAlloc.get(302)![0].start), '2026-12-01'); // urgent lands immediately on day 0
+  assert.ok(dateKeyInSh(idleAlloc.get(301)![0].start) >= '2026-12-04'); // later skips days 0..2 cool-off!
+
+  // Case 2: Busy week (Days 0..6 have 5h/day fixed work, leaving 3h free > 60m duration, yet occupancy >= 55%)
+  // -> `later` MUST stay in backlog pool despite 3h daily open gap; `soon` skips crowded Day 0..1 when near3d >= 65%
+  const busyEvents = Array.from({ length: 7 }, (_, i) => {
+    const dayStr = `2026-12-0${1 + i}`;
+    return {
+      id: `busy-day-${i}`,
+      title: `核心会议-${i}`,
+      // 09:00..15:00 in Asia/Shanghai = 01:00..07:00 UTC (with 12-13 lunch inside = 5h busy of 8h net work = 62.5% busy, >= 45% threshold)
+      start: new Date(`${dayStr}T01:00:00.000Z`),
+      end: new Date(`${dayStr}T07:00:00.000Z`),
+      isAllDay: false,
+    };
+  });
+
+  const busyLater = makeTask({ ...laterTask, id: 303 });
+  const busySoon = makeTask({
+    id: 304,
+    title: '优化脚本(近日规划)',
+    time_mode: 'flexible',
+    urgency_pace: 'soon',
+    duration_minutes: 60,
+    importance: 55,
+    urgency: 55,
+    created_at: baseNow.toISOString(),
+  });
+
+  const busyAlloc = new Map();
+  const busyRem = new Set<number>([303, 304]);
+  const busyRejects = new Map<number, { code: string; text: string }>();
+  scheduleTaskGroupInHorizon(
+    [busyLater, busySoon],
+    busyEvents,
+    baseNow,
+    7,
+    {
+      timezone: 'Asia/Shanghai',
+      workStartHour: 9,
+      workEndHour: 18,
+      workWindows: [{ startHour: 9, endHour: 18 }],
+      bufferMinutes: 0,
+      advanceDeadlineDays: 1,
+      releaseTimeMsToday: baseNow.getTime(),
+    },
+    busyAlloc,
+    busyRem,
+    busyRejects
+  );
+
+  // Later memo stays strictly off calendar in backlog
+  assert.equal((busyAlloc.get(303) || []).length, 0);
+  assert.equal(busyRem.has(303), true);
+  assert.equal(busyRejects.get(303)?.code, 'deferred_later_backlog');
+
+  // Soon task defers past crowded Days 0..1 (doesn't touch Dec 1 or Dec 2), or yields when occupancy is too high
+  const soonPlaced = busyAlloc.get(304) || [];
+  if (soonPlaced.length > 0) {
+    assert.ok(dateKeyInSh(soonPlaced[0].start) >= '2026-12-03');
+  }
+});
+
 
